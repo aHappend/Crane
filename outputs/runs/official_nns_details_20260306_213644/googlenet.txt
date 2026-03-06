@@ -1,0 +1,57 @@
+network=googlenet
+source_ref=src/nns/googlenet.cpp
+batch_size=64
+best_sub_batch=32
+solver=ortools-scip
+latency=10548611111.111111
+energy=204.506500
+edp=2157259538194.444580
+
+states
+  idx=0 name=W0 category=warmup active_pe=1 assigned_sub_batches=0
+  idx=1 name=W1 category=warmup active_pe=2 assigned_sub_batches=0
+  idx=2 name=W2 category=warmup active_pe=3 assigned_sub_batches=1
+  idx=3 name=M category=steady active_pe=4 assigned_sub_batches=1
+  idx=4 name=D0 category=drain active_pe=3 assigned_sub_batches=0
+  idx=5 name=D1 category=drain active_pe=2 assigned_sub_batches=0
+  idx=6 name=D2 category=drain active_pe=1 assigned_sub_batches=0
+
+layers
+  col=0 layer=conv1 flops_g=0.9 out_mb=18.0
+  col=1 layer=pool1 flops_g=0.2 out_mb=10.0
+  col=2 layer=inc3a flops_g=2.0 out_mb=14.0
+  col=3 layer=inc3b flops_g=2.1 out_mb=14.0
+  col=4 layer=inc4a flops_g=2.5 out_mb=12.0
+  col=5 layer=inc4b flops_g=2.6 out_mb=12.0
+  col=6 layer=inc4c flops_g=2.6 out_mb=12.0
+  col=7 layer=inc5 flops_g=2.1 out_mb=9.0
+  col=8 layer=fc flops_g=0.5 out_mb=2.0
+
+ScT_cumulative(rows=state, cols=layer)
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+1,1,0,0,0,0,0,0,1
+1,1,1,1,1,1,1,1,1
+1,2,1,1,1,1,1,1,1
+2,2,2,2,2,2,2,2,2
+
+ScT_delta_per_state(rows=state, cols=layer)
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+1,1,0,0,0,0,0,0,1
+0,0,1,1,1,1,1,1,0
+0,1,0,0,0,0,0,0,0
+1,0,1,1,1,1,1,1,1
+
+layer_to_state_mapping
+  conv1: M:+1 D2:+1
+  pool1: M:+1 D1:+1
+  inc3a: D0:+1 D2:+1
+  inc3b: D0:+1 D2:+1
+  inc4a: D0:+1 D2:+1
+  inc4b: D0:+1 D2:+1
+  inc4c: D0:+1 D2:+1
+  inc5: D0:+1 D2:+1
+  fc: M:+1 D2:+1

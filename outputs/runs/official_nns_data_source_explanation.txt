@@ -1,0 +1,32 @@
+official_nns_data_source_explanation
+
+1) what comes from official src/nns code
+- source files: src/nns/*.cpp
+- declarations: include/nns/nns.h
+- data model: include/network.h (Network/Node/Layer interfaces)
+
+The official nns code provides network graph construction logic:
+- layer names
+- layer operator types (Conv/Pooling/Eltwise/FC/Transpose/etc.)
+- topology/dependency (n.add calls and prev links)
+- shape-related metadata in layer construction arguments
+
+2) what is NOT included in these files
+- no trained weight tensors/checkpoints
+- no per-layer calibrated runtime counters from hardware
+
+So these files are architecture/topology definitions, not trained model parameter dumps.
+
+3) how current scheduling experiment data is produced
+- We run official-network-family proxies in example/run_official_nns_suite.py.
+- Each layer is represented as one scheduling block to expose layer-level ScT columns.
+- Crane scheduler generates:
+  - state order/category/active PE
+  - state sub-batch allocation
+  - ScT cumulative matrix (state x layer)
+  - ScT delta matrix (per-state processed amount)
+  - layer-to-state mapping string
+
+4) output files
+- summary text/csv: outputs/runs/official_nns_suite_*.txt|csv
+- per-network detail: outputs/runs/official_nns_details_*/<network>.txt

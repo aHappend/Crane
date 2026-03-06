@@ -1,0 +1,57 @@
+network=resnet
+source_ref=src/nns/resnet.cpp
+batch_size=64
+best_sub_batch=32
+solver=ortools-scip
+latency=17422222222.222221
+energy=234.686100
+edp=4088753386666.666504
+
+states
+  idx=0 name=W0 category=warmup active_pe=1 assigned_sub_batches=0
+  idx=1 name=W1 category=warmup active_pe=2 assigned_sub_batches=0
+  idx=2 name=W2 category=warmup active_pe=3 assigned_sub_batches=1
+  idx=3 name=M category=steady active_pe=4 assigned_sub_batches=1
+  idx=4 name=D0 category=drain active_pe=3 assigned_sub_batches=0
+  idx=5 name=D1 category=drain active_pe=2 assigned_sub_batches=0
+  idx=6 name=D2 category=drain active_pe=1 assigned_sub_batches=0
+
+layers
+  col=0 layer=conv1 flops_g=1.0 out_mb=20.0
+  col=1 layer=pool1 flops_g=0.2 out_mb=12.0
+  col=2 layer=res2_1 flops_g=3.0 out_mb=16.0
+  col=3 layer=res2_2 flops_g=2.8 out_mb=16.0
+  col=4 layer=res3_1 flops_g=4.2 out_mb=14.0
+  col=5 layer=res3_2 flops_g=4.0 out_mb=14.0
+  col=6 layer=res4_1 flops_g=5.0 out_mb=12.0
+  col=7 layer=res4_2 flops_g=4.8 out_mb=12.0
+  col=8 layer=fc flops_g=0.6 out_mb=2.2
+
+ScT_cumulative(rows=state, cols=layer)
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+1,1,0,0,0,0,0,0,1
+1,1,1,1,1,1,1,1,1
+1,2,1,1,1,1,1,1,1
+2,2,2,2,2,2,2,2,2
+
+ScT_delta_per_state(rows=state, cols=layer)
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+1,1,0,0,0,0,0,0,1
+0,0,1,1,1,1,1,1,0
+0,1,0,0,0,0,0,0,0
+1,0,1,1,1,1,1,1,1
+
+layer_to_state_mapping
+  conv1: M:+1 D2:+1
+  pool1: M:+1 D1:+1
+  res2_1: D0:+1 D2:+1
+  res2_2: D0:+1 D2:+1
+  res3_1: D0:+1 D2:+1
+  res3_2: D0:+1 D2:+1
+  res4_1: D0:+1 D2:+1
+  res4_2: D0:+1 D2:+1
+  fc: M:+1 D2:+1

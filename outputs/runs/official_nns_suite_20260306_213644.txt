@@ -1,190 +1,136 @@
-supplemented_nns_suite run: 20260306_210807
-count=17
+official_nns_suite run: 20260306_213644
+count=12
+details_dir=C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260306_213644
 
 [alexnet]
-  source_kind: official_src_nns
   source_ref: src/nns/alexnet.cpp
+  batch_size: 64
   best_sub_batch: 32
   state_batches: 0,0,1,1,0,0,0
   active_states: 2
   latency: 4593750000.000000
   energy: 148.316850
   edp: 681330529687.500122
-  solver: ortools-scip
-
-[attention_group_builder]
-  source_kind: supplemented_variant
-  source_ref: supplemented_profile
-  best_sub_batch: 32
-  state_batches: 0,0,1,1,1,0,0
-  active_states: 3
-  latency: 22208333333.333332
-  energy: 858.772000
-  edp: 19071894833333.335938
-  solver: ortools-scip
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260306_213644\alexnet.txt
 
 [darknet19]
-  source_kind: official_src_nns
   source_ref: src/nns/darknet19.cpp
+  batch_size: 64
   best_sub_batch: 32
   state_batches: 0,0,1,1,0,0,0
   active_states: 2
   latency: 7281944444.444445
   energy: 179.687750
   edp: 1308476212847.222168
-  solver: ortools-scip
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260306_213644\darknet19.txt
 
 [densenet]
-  source_kind: official_src_nns
   source_ref: src/nns/densenet.cpp
+  batch_size: 64
   best_sub_batch: 32
   state_batches: 0,0,1,1,0,0,0
   active_states: 2
   latency: 7554166666.666666
   energy: 331.578500
   edp: 2504799252083.333008
-  solver: ortools-scip
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260306_213644\densenet.txt
 
 [gnmt]
-  source_kind: official_src_nns
   source_ref: src/nns/gnmt.cpp
+  batch_size: 128
   best_sub_batch: 32
   state_batches: 0,1,1,1,1,0,0
   active_states: 4
   latency: 37673611111.111107
   energy: 815.340000
   edp: 30716802083333.335938
-  solver: ortools-scip
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260306_213644\gnmt.txt
 
 [googlenet]
-  source_kind: official_src_nns
   source_ref: src/nns/googlenet.cpp
+  batch_size: 64
   best_sub_batch: 32
   state_batches: 0,0,1,1,0,0,0
   active_states: 2
   latency: 10548611111.111111
   energy: 204.506500
   edp: 2157259538194.444580
-  solver: ortools-scip
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260306_213644\googlenet.txt
 
 [incep_resnet]
-  source_kind: official_src_nns
   source_ref: src/nns/incep_resnet.cpp
+  batch_size: 64
   best_sub_batch: 32
   state_batches: 0,0,1,1,0,0,0
   active_states: 2
   latency: 15652777777.777775
   energy: 211.257200
   edp: 3306762005555.555176
-  solver: ortools-scip
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260306_213644\incep_resnet.txt
 
 [llm]
-  source_kind: official_src_nns
   source_ref: src/nns/llm.cpp
+  batch_size: 128
   best_sub_batch: 32
   state_batches: 0,1,1,1,1,0,0
   active_states: 4
   latency: 113194444444.444443
   energy: 1836.420000
   edp: 207872541666666.656250
-  solver: ortools-scip
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260306_213644\llm.txt
 
 [pnasnet]
-  source_kind: official_src_nns
   source_ref: src/nns/pnasnet.cpp
+  batch_size: 64
   best_sub_batch: 32
   state_batches: 0,0,1,1,0,0,0
   active_states: 2
   latency: 10820833333.333332
   energy: 178.695000
   edp: 1933628812499.999756
-  solver: ortools-scip
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260306_213644\pnasnet.txt
 
 [resnet]
-  source_kind: official_src_nns
   source_ref: src/nns/resnet.cpp
+  batch_size: 64
   best_sub_batch: 32
   state_batches: 0,0,1,1,0,0,0
   active_states: 2
   latency: 17422222222.222221
   energy: 234.686100
   edp: 4088753386666.666504
-  solver: ortools-scip
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260306_213644\resnet.txt
 
 [transformer]
-  source_kind: official_src_nns
   source_ref: src/nns/transformer.cpp
+  batch_size: 128
   best_sub_batch: 32
   state_batches: 0,1,1,1,1,0,0
   active_states: 4
   latency: 58854166666.666664
   energy: 1143.000000
   edp: 67270312500000.007812
-  solver: ortools-scip
-
-[transformer_fused]
-  source_kind: supplemented_variant
-  source_ref: supplemented_profile
-  best_sub_batch: 32
-  state_batches: 0,1,1,1,1,0,0
-  active_states: 4
-  latency: 39236111111.111107
-  energy: 556.260000
-  edp: 21825479166666.664062
-  solver: ortools-scip
-
-[transformer_grouped]
-  source_kind: supplemented_variant
-  source_ref: supplemented_profile
-  best_sub_batch: 32
-  state_batches: 0,1,1,1,1,0,0
-  active_states: 4
-  latency: 46180555555.555550
-  energy: 880.110000
-  edp: 40643968749999.992188
-  solver: ortools-scip
-
-[transformer_semifused]
-  source_kind: supplemented_variant
-  source_ref: supplemented_profile
-  best_sub_batch: 32
-  state_batches: 0,1,1,1,1,0,0
-  active_states: 4
-  latency: 45833333333.333328
-  energy: 872.490000
-  edp: 39989124999999.992188
-  solver: ortools-scip
-
-[transformer_semigrouped]
-  source_kind: supplemented_variant
-  source_ref: supplemented_profile
-  best_sub_batch: 32
-  state_batches: 0,1,1,1,1,0,0
-  active_states: 4
-  latency: 44097222222.222214
-  energy: 857.250000
-  edp: 37802343749999.992188
-  solver: ortools-scip
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260306_213644\transformer.txt
 
 [vgg]
-  source_kind: official_src_nns
   source_ref: src/nns/vgg.cpp
+  batch_size: 64
   best_sub_batch: 32
   state_batches: 0,0,1,1,0,0,0
   active_states: 2
   latency: 8983333333.333332
   energy: 226.347000
   edp: 2033350550000.000000
-  solver: ortools-scip
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260306_213644\vgg.txt
 
 [zfnet]
-  source_kind: official_src_nns
   source_ref: src/nns/zfnet.cpp
+  batch_size: 64
   best_sub_batch: 32
   state_batches: 0,0,1,1,0,0,0
   active_states: 2
   latency: 4151388888.888888
   energy: 135.014000
   edp: 560495619444.444458
-  solver: ortools-scip
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260306_213644\zfnet.txt
 
