@@ -1,0 +1,42 @@
+supplemented_nns_suite summary
+source_csv: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\supplemented_nns_suite_20260306_210807.csv
+source_txt: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\supplemented_nns_suite_20260306_210807.txt
+
+counts
+  total: 17
+  official_src_nns: 12
+  supplemented_variant: 5
+
+aggregate
+  avg_active_states: 2.88
+  avg_edp_official: 27,036,209,346,414.90
+  avg_edp_supplemented: 31,866,562,300,000.00
+
+best_sub_batch_distribution
+  sub_batch=32: 17
+
+active_states_distribution
+  active_states=2: 9
+  active_states=3: 1
+  active_states=4: 7
+
+lowest_edp_top5
+  zfnet: edp=560495619444.444458, active_states=2, state_batches=0,0,1,1,0,0,0
+  alexnet: edp=681330529687.500122, active_states=2, state_batches=0,0,1,1,0,0,0
+  darknet19: edp=1308476212847.222168, active_states=2, state_batches=0,0,1,1,0,0,0
+  pnasnet: edp=1933628812499.999756, active_states=2, state_batches=0,0,1,1,0,0,0
+  vgg: edp=2033350550000.000000, active_states=2, state_batches=0,0,1,1,0,0,0
+
+highest_edp_top5
+  llm: edp=207872541666666.656250, active_states=4, state_batches=0,1,1,1,1,0,0
+  transformer: edp=67270312500000.007812, active_states=4, state_batches=0,1,1,1,1,0,0
+  transformer_grouped: edp=40643968749999.992188, active_states=4, state_batches=0,1,1,1,1,0,0
+  transformer_semifused: edp=39989124999999.992188, active_states=4, state_batches=0,1,1,1,1,0,0
+  transformer_semigrouped: edp=37802343749999.992188, active_states=4, state_batches=0,1,1,1,1,0,0
+
+supplemented_variants
+  attention_group_builder: best_sub_batch=32, active_states=3, edp=19071894833333.335938, state_batches=0,0,1,1,1,0,0
+  transformer_fused: best_sub_batch=32, active_states=4, edp=21825479166666.664062, state_batches=0,1,1,1,1,0,0
+  transformer_grouped: best_sub_batch=32, active_states=4, edp=40643968749999.992188, state_batches=0,1,1,1,1,0,0
+  transformer_semifused: best_sub_batch=32, active_states=4, edp=39989124999999.992188, state_batches=0,1,1,1,1,0,0
+  transformer_semigrouped: best_sub_batch=32, active_states=4, edp=37802343749999.992188, state_batches=0,1,1,1,1,0,0
