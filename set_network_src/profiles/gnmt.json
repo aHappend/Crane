@@ -1,0 +1,66 @@
+{
+  "name": "gnmt",
+  "batch_size": 128,
+  "blocks": [
+    {
+      "name": "enc_embed",
+      "layers": [
+        {
+          "name": "src_embed",
+          "flops": 800000000.0,
+          "output_size": 28.0
+        }
+      ]
+    },
+    {
+      "name": "encoder",
+      "layers": [
+        {
+          "name": "enc_lstm1",
+          "flops": 3800000000.0,
+          "output_size": 30.0
+        },
+        {
+          "name": "enc_lstm2",
+          "flops": 3600000000.0,
+          "output_size": 30.0
+        },
+        {
+          "name": "enc_lstm3",
+          "flops": 3500000000.0,
+          "output_size": 30.0
+        }
+      ]
+    },
+    {
+      "name": "decoder",
+      "layers": [
+        {
+          "name": "dec_lstm1",
+          "flops": 4000000000.0,
+          "output_size": 32.0
+        },
+        {
+          "name": "dec_lstm2",
+          "flops": 3700000000.0,
+          "output_size": 32.0
+        }
+      ]
+    },
+    {
+      "name": "attn_head",
+      "layers": [
+        {
+          "name": "attn",
+          "flops": 1600000000.0,
+          "output_size": 24.0
+        },
+        {
+          "name": "softmax",
+          "flops": 700000000.0,
+          "output_size": 8.0
+        }
+      ]
+    }
+  ]
+}

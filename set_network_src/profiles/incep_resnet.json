@@ -1,0 +1,66 @@
+{
+  "name": "incep_resnet",
+  "batch_size": 64,
+  "blocks": [
+    {
+      "name": "stem",
+      "layers": [
+        {
+          "name": "conv_stem",
+          "flops": 1100000000.0,
+          "output_size": 20.0
+        }
+      ]
+    },
+    {
+      "name": "block_a",
+      "layers": [
+        {
+          "name": "ir_a1",
+          "flops": 3000000000.0,
+          "output_size": 16.0
+        },
+        {
+          "name": "ir_a2",
+          "flops": 3000000000.0,
+          "output_size": 16.0
+        }
+      ]
+    },
+    {
+      "name": "block_b",
+      "layers": [
+        {
+          "name": "ir_b1",
+          "flops": 3500000000.0,
+          "output_size": 14.0
+        },
+        {
+          "name": "ir_b2",
+          "flops": 3600000000.0,
+          "output_size": 14.0
+        }
+      ]
+    },
+    {
+      "name": "block_c",
+      "layers": [
+        {
+          "name": "ir_c1",
+          "flops": 4000000000.0,
+          "output_size": 12.0
+        },
+        {
+          "name": "ir_c2",
+          "flops": 4099999999.9999995,
+          "output_size": 12.0
+        },
+        {
+          "name": "fc",
+          "flops": 700000000.0,
+          "output_size": 2.4
+        }
+      ]
+    }
+  ]
+}

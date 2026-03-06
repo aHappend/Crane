@@ -1,0 +1,56 @@
+{
+  "name": "transformer_grouped",
+  "batch_size": 128,
+  "blocks": [
+    {
+      "name": "embed",
+      "layers": [
+        {
+          "name": "embed",
+          "flops": 1800000000.0,
+          "output_size": 39.0
+        }
+      ]
+    },
+    {
+      "name": "enc_group_1",
+      "layers": [
+        {
+          "name": "attn_g1",
+          "flops": 4600000000.0,
+          "output_size": 44.0
+        },
+        {
+          "name": "mlp_g1",
+          "flops": 6900000000.0,
+          "output_size": 45.0
+        }
+      ]
+    },
+    {
+      "name": "enc_group_2",
+      "layers": [
+        {
+          "name": "attn_g2",
+          "flops": 4500000000.0,
+          "output_size": 44.0
+        },
+        {
+          "name": "mlp_g2",
+          "flops": 6800000000.0,
+          "output_size": 45.0
+        }
+      ]
+    },
+    {
+      "name": "head",
+      "layers": [
+        {
+          "name": "proj",
+          "flops": 2000000000.0,
+          "output_size": 14.0
+        }
+      ]
+    }
+  ]
+}

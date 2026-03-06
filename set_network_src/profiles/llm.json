@@ -1,0 +1,81 @@
+{
+  "name": "llm",
+  "batch_size": 128,
+  "blocks": [
+    {
+      "name": "embedding",
+      "layers": [
+        {
+          "name": "token_embed",
+          "flops": 2500000000.0,
+          "output_size": 50.0
+        },
+        {
+          "name": "rope",
+          "flops": 400000000.0,
+          "output_size": 50.0
+        }
+      ]
+    },
+    {
+      "name": "decoder_stack_1",
+      "layers": [
+        {
+          "name": "attn1",
+          "flops": 8000000000.0,
+          "output_size": 56.0
+        },
+        {
+          "name": "mlp1",
+          "flops": 12500000000.0,
+          "output_size": 58.0
+        }
+      ]
+    },
+    {
+      "name": "decoder_stack_2",
+      "layers": [
+        {
+          "name": "attn2",
+          "flops": 7800000000.0,
+          "output_size": 56.0
+        },
+        {
+          "name": "mlp2",
+          "flops": 12000000000.0,
+          "output_size": 58.0
+        }
+      ]
+    },
+    {
+      "name": "decoder_stack_3",
+      "layers": [
+        {
+          "name": "attn3",
+          "flops": 7600000000.0,
+          "output_size": 55.0
+        },
+        {
+          "name": "mlp3",
+          "flops": 11800000000.0,
+          "output_size": 57.0
+        }
+      ]
+    },
+    {
+      "name": "lm_head",
+      "layers": [
+        {
+          "name": "norm",
+          "flops": 600000000.0,
+          "output_size": 30.0
+        },
+        {
+          "name": "head",
+          "flops": 2000000000.0,
+          "output_size": 12.0
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "name": "transformer_semifused",
+  "batch_size": 128,
+  "blocks": [
+    {
+      "name": "embed",
+      "layers": [
+        {
+          "name": "embed",
+          "flops": 1800000000.0,
+          "output_size": 39.0
+        }
+      ]
+    },
+    {
+      "name": "enc_sf_1",
+      "layers": [
+        {
+          "name": "attn1",
+          "flops": 4400000000.0,
+          "output_size": 43.0
+        },
+        {
+          "name": "fused_mlp1",
+          "flops": 7000000000.0,
+          "output_size": 45.0
+        }
+      ]
+    },
+    {
+      "name": "enc_sf_2",
+      "layers": [
+        {
+          "name": "attn2",
+          "flops": 4300000000.0,
+          "output_size": 43.0
+        },
+        {
+          "name": "fused_mlp2",
+          "flops": 6900000000.0,
+          "output_size": 45.0
+        }
+      ]
+    },
+    {
+      "name": "head",
+      "layers": [
+        {
+          "name": "proj",
+          "flops": 2000000000.0,
+          "output_size": 14.0
+        }
+      ]
+    }
+  ]
+}

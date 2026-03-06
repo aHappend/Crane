@@ -1,0 +1,66 @@
+{
+  "name": "darknt19",
+  "batch_size": 64,
+  "blocks": [
+    {
+      "name": "stage1",
+      "layers": [
+        {
+          "name": "conv1",
+          "flops": 600000000.0,
+          "output_size": 20.0
+        },
+        {
+          "name": "conv2",
+          "flops": 900000000.0,
+          "output_size": 16.0
+        }
+      ]
+    },
+    {
+      "name": "stage2",
+      "layers": [
+        {
+          "name": "conv3",
+          "flops": 1400000000.0,
+          "output_size": 14.0
+        },
+        {
+          "name": "conv4",
+          "flops": 1800000000.0,
+          "output_size": 12.0
+        }
+      ]
+    },
+    {
+      "name": "stage3",
+      "layers": [
+        {
+          "name": "conv5",
+          "flops": 2000000000.0,
+          "output_size": 10.0
+        },
+        {
+          "name": "conv6",
+          "flops": 2300000000.0,
+          "output_size": 9.0
+        }
+      ]
+    },
+    {
+      "name": "head",
+      "layers": [
+        {
+          "name": "conv7",
+          "flops": 1200000000.0,
+          "output_size": 6.0
+        },
+        {
+          "name": "pred",
+          "flops": 500000000.0,
+          "output_size": 3.5
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,173 @@
+SET-style network suite run: 20260306_202326
+profiles=17
+
+[alexnet]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,0,1,0,0,0
+  active_states: 1
+  latency: 1875000000.000000
+  energy: 76.941000
+  edp: 144264375000.000000
+  solver: ortools-scip
+
+[attention_group_builder]
+  best_sub_batch: 32
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,1,1,1,0,0
+  active_states: 3
+  latency: 22208333333.333332
+  energy: 858.772000
+  edp: 19071894833333.335938
+  solver: ortools-scip
+
+[darknt19]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,0,1,0,0,0
+  active_states: 1
+  latency: 2972222222.222222
+  energy: 93.215000
+  edp: 277055694444.444458
+  solver: ortools-scip
+
+[densenet]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,0,1,0,0,0
+  active_states: 1
+  latency: 3083333333.333333
+  energy: 172.010000
+  edp: 530364166666.666687
+  solver: ortools-scip
+
+[gnmt]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,1,1,0,0,0
+  active_states: 2
+  latency: 14768055555.555553
+  energy: 424.897000
+  edp: 6274902501388.888672
+  solver: ortools-scip
+
+[googlenet]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,0,1,0,0,0
+  active_states: 1
+  latency: 4305555555.555555
+  energy: 106.090000
+  edp: 456776388888.888855
+  solver: ortools-scip
+
+[incep_resnet]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,0,1,0,0,0
+  active_states: 1
+  latency: 6388888888.888888
+  energy: 109.592000
+  edp: 700171111111.111084
+  solver: ortools-scip
+
+[llm]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,1,1,0,0,0
+  active_states: 2
+  latency: 44372222222.222221
+  energy: 957.011000
+  edp: 42464704761111.117188
+  solver: ortools-scip
+
+[pnasnet]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,0,1,0,0,0
+  active_states: 1
+  latency: 4416666666.666667
+  energy: 92.700000
+  edp: 409425000000.000061
+  solver: ortools-scip
+
+[resnet]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,0,1,0,0,0
+  active_states: 1
+  latency: 7111111111.111111
+  energy: 121.746000
+  edp: 865749333333.333374
+  solver: ortools-scip
+
+[transformer]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,1,1,0,0,0
+  active_states: 2
+  latency: 23070833333.333332
+  energy: 595.650000
+  edp: 13742141875000.001953
+  solver: ortools-scip
+
+[transformer_fused]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,1,1,0,0,0
+  active_states: 2
+  latency: 15380555555.555553
+  energy: 289.883000
+  edp: 4458561586111.111328
+  solver: ortools-scip
+
+[transformer_grouped]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,1,1,0,0,0
+  active_states: 2
+  latency: 18102777777.777775
+  energy: 458.650500
+  edp: 8302848079166.666016
+  solver: ortools-scip
+
+[transformer_semifused]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,1,1,0,0,0
+  active_states: 2
+  latency: 17966666666.666664
+  energy: 454.679500
+  edp: 8169075016666.666016
+  solver: ortools-scip
+
+[transformer_semigrouped]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,1,1,0,0,0
+  active_states: 2
+  latency: 17286111111.111107
+  energy: 446.737500
+  edp: 7722354062499.998047
+  solver: ortools-scip
+
+[vgg]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,0,1,0,0,0
+  active_states: 1
+  latency: 3666666666.666667
+  energy: 117.420000
+  edp: 430540000000.000000
+  solver: ortools-scip
+
+[zfnet]
+  best_sub_batch: 64
+  state_order: W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+  state_batches: 0,0,0,1,0,0,0
+  active_states: 1
+  latency: 1694444444.444444
+  energy: 70.040000
+  edp: 118678888888.888901
+  solver: ortools-scip
+
