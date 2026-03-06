@@ -1,0 +1,130 @@
+network=gnmt
+mode=layer_level
+source_ref=src/nns/gnmt.cpp
+batch_size=128
+best_sub_batch=32
+num_blocks=8
+num_states=15
+sct_solver=ortools-scip
+met_solver=ortools-scip
+compute_latency=26481198391.376724
+compute_energy=804.400000
+memory_latency=0.167969
+memory_energy=5.160000
+latency=26481198391.544693
+energy=809.560000
+edp=21438118969858.925781
+
+states
+  idx=0 name=S0 category=warmup active_pe=1 pe_span=PE0..PE0 active_blocks=['src_embed'] assigned_sub_batches=0
+  idx=1 name=S1 category=warmup active_pe=2 pe_span=PE0..PE1 active_blocks=['src_embed', 'enc_lstm1'] assigned_sub_batches=0
+  idx=2 name=S2 category=warmup active_pe=3 pe_span=PE0..PE2 active_blocks=['src_embed', 'enc_lstm1', 'enc_lstm2'] assigned_sub_batches=0
+  idx=3 name=S3 category=warmup active_pe=4 pe_span=PE0..PE3 active_blocks=['src_embed', 'enc_lstm1', 'enc_lstm2', 'enc_lstm3'] assigned_sub_batches=1
+  idx=4 name=S4 category=warmup active_pe=4 pe_span=PE0..PE3 active_blocks=['src_embed', 'enc_lstm1', 'enc_lstm2', 'enc_lstm3', 'dec_lstm1'] assigned_sub_batches=1
+  idx=5 name=S5 category=warmup active_pe=4 pe_span=PE0..PE3 active_blocks=['src_embed', 'enc_lstm1', 'enc_lstm2', 'enc_lstm3', 'dec_lstm1', 'dec_lstm2'] assigned_sub_batches=0
+  idx=6 name=S6 category=warmup active_pe=4 pe_span=PE0..PE3 active_blocks=['src_embed', 'enc_lstm1', 'enc_lstm2', 'enc_lstm3', 'dec_lstm1', 'dec_lstm2', 'attn'] assigned_sub_batches=1
+  idx=7 name=S7 category=steady active_pe=4 pe_span=PE0..PE3 active_blocks=['src_embed', 'enc_lstm1', 'enc_lstm2', 'enc_lstm3', 'dec_lstm1', 'dec_lstm2', 'attn', 'softmax'] assigned_sub_batches=1
+  idx=8 name=S8 category=drain active_pe=4 pe_span=PE0..PE3 active_blocks=['enc_lstm1', 'enc_lstm2', 'enc_lstm3', 'dec_lstm1', 'dec_lstm2', 'attn', 'softmax'] assigned_sub_batches=0
+  idx=9 name=S9 category=drain active_pe=4 pe_span=PE0..PE3 active_blocks=['enc_lstm2', 'enc_lstm3', 'dec_lstm1', 'dec_lstm2', 'attn', 'softmax'] assigned_sub_batches=0
+  idx=10 name=S10 category=drain active_pe=4 pe_span=PE0..PE3 active_blocks=['enc_lstm3', 'dec_lstm1', 'dec_lstm2', 'attn', 'softmax'] assigned_sub_batches=0
+  idx=11 name=S11 category=drain active_pe=4 pe_span=PE0..PE3 active_blocks=['dec_lstm1', 'dec_lstm2', 'attn', 'softmax'] assigned_sub_batches=1
+  idx=12 name=S12 category=drain active_pe=3 pe_span=PE0..PE2 active_blocks=['dec_lstm2', 'attn', 'softmax'] assigned_sub_batches=1
+  idx=13 name=S13 category=drain active_pe=2 pe_span=PE0..PE1 active_blocks=['attn', 'softmax'] assigned_sub_batches=0
+  idx=14 name=S14 category=drain active_pe=1 pe_span=PE0..PE0 active_blocks=['softmax'] assigned_sub_batches=1
+
+blocks(columns in ScT/MeT)
+  col=0 block=src_embed
+  col=1 block=enc_lstm1
+  col=2 block=enc_lstm2
+  col=3 block=enc_lstm3
+  col=4 block=dec_lstm1
+  col=5 block=dec_lstm2
+  col=6 block=attn
+  col=7 block=softmax
+
+block_dependencies(parent->child)
+  (0,1) src_embed -> enc_lstm1
+  (1,2) enc_lstm1 -> enc_lstm2
+  (2,3) enc_lstm2 -> enc_lstm3
+  (3,4) enc_lstm3 -> dec_lstm1
+  (4,5) dec_lstm1 -> dec_lstm2
+  (5,6) dec_lstm2 -> attn
+  (6,7) attn -> softmax
+
+ScT_cumulative(rows=state, cols=block)
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+1,1,1,1,0,0,0,0
+2,2,2,2,1,0,0,0
+2,2,2,2,1,0,0,0
+3,3,3,3,2,1,1,0
+4,4,4,4,3,2,2,1
+4,4,4,4,3,2,2,1
+4,4,4,4,3,2,2,1
+4,4,4,4,3,2,2,1
+4,4,4,4,4,3,3,2
+4,4,4,4,4,4,4,3
+4,4,4,4,4,4,4,3
+4,4,4,4,4,4,4,4
+
+ScT_delta_per_state(rows=state, cols=block)
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+1,1,1,1,0,0,0,0
+1,1,1,1,1,0,0,0
+0,0,0,0,0,0,0,0
+1,1,1,1,1,1,1,0
+1,1,1,1,1,1,1,1
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,1,1,1,1
+0,0,0,0,0,1,1,1
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,1
+
+MeT_S(rows=state, cols=block)
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+1,1,1,0,0,0,0,0
+2,2,2,1,0,0,0,0
+2,2,2,1,0,0,0,0
+3,3,3,2,1,1,0,0
+4,4,4,3,2,2,1,1
+4,4,4,3,2,2,1,1
+4,4,4,3,2,2,1,1
+4,4,4,3,2,2,1,1
+4,4,4,4,3,3,2,2
+4,4,4,4,4,4,3,3
+4,4,4,4,4,4,3,3
+4,4,4,4,4,4,4,4
+
+MeT_D(rows=state, cols=block)
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+1,1,1,0,0,0,0,0
+2,2,2,1,0,0,0,0
+2,2,2,1,0,0,0,0
+3,3,3,2,1,1,0,0
+4,4,4,3,2,2,1,1
+4,4,4,3,2,2,1,1
+4,4,4,3,2,2,1,1
+4,4,4,3,2,2,1,1
+4,4,4,4,3,3,2,2
+4,4,4,4,4,4,3,3
+4,4,4,4,4,4,3,3
+4,4,4,4,4,4,4,4
+
+block_to_state_mapping
+  src_embed: S3:+1 S4:+1 S6:+1 S7:+1
+  enc_lstm1: S3:+1 S4:+1 S6:+1 S7:+1
+  enc_lstm2: S3:+1 S4:+1 S6:+1 S7:+1
+  enc_lstm3: S3:+1 S4:+1 S6:+1 S7:+1
+  dec_lstm1: S4:+1 S6:+1 S7:+1 S11:+1
+  dec_lstm2: S6:+1 S7:+1 S11:+1 S12:+1
+  attn: S6:+1 S7:+1 S11:+1 S12:+1
+  softmax: S7:+1 S11:+1 S12:+1 S14:+1

@@ -1,0 +1,143 @@
+network=alexnet
+mode=layer_level
+source_ref=src/nns/alexnet.cpp
+batch_size=64
+best_sub_batch=32
+num_blocks=9
+num_states=17
+sct_solver=ortools-scip
+met_solver=ortools-scip
+compute_latency=3924418604.651163
+compute_energy=141.930000
+memory_latency=0.021973
+memory_energy=0.675000
+latency=3924418604.673135
+energy=142.605000
+edp=559641715119.412476
+
+states
+  idx=0 name=S0 category=warmup active_pe=1 pe_span=PE0..PE0 active_blocks=['conv1'] assigned_sub_batches=0
+  idx=1 name=S1 category=warmup active_pe=2 pe_span=PE0..PE1 active_blocks=['conv1', 'pool1'] assigned_sub_batches=0
+  idx=2 name=S2 category=warmup active_pe=3 pe_span=PE0..PE2 active_blocks=['conv1', 'pool1', 'conv2'] assigned_sub_batches=0
+  idx=3 name=S3 category=warmup active_pe=4 pe_span=PE0..PE3 active_blocks=['conv1', 'pool1', 'conv2', 'conv3'] assigned_sub_batches=1
+  idx=4 name=S4 category=warmup active_pe=4 pe_span=PE0..PE3 active_blocks=['conv1', 'pool1', 'conv2', 'conv3', 'conv4'] assigned_sub_batches=0
+  idx=5 name=S5 category=warmup active_pe=4 pe_span=PE0..PE3 active_blocks=['conv1', 'pool1', 'conv2', 'conv3', 'conv4', 'conv5'] assigned_sub_batches=0
+  idx=6 name=S6 category=warmup active_pe=4 pe_span=PE0..PE3 active_blocks=['conv1', 'pool1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6'] assigned_sub_batches=0
+  idx=7 name=S7 category=warmup active_pe=4 pe_span=PE0..PE3 active_blocks=['conv1', 'pool1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7'] assigned_sub_batches=0
+  idx=8 name=S8 category=steady active_pe=4 pe_span=PE0..PE3 active_blocks=['conv1', 'pool1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8'] assigned_sub_batches=1
+  idx=9 name=S9 category=drain active_pe=4 pe_span=PE0..PE3 active_blocks=['pool1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8'] assigned_sub_batches=0
+  idx=10 name=S10 category=drain active_pe=4 pe_span=PE0..PE3 active_blocks=['conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8'] assigned_sub_batches=0
+  idx=11 name=S11 category=drain active_pe=4 pe_span=PE0..PE3 active_blocks=['conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8'] assigned_sub_batches=0
+  idx=12 name=S12 category=drain active_pe=4 pe_span=PE0..PE3 active_blocks=['conv4', 'conv5', 'fc6', 'fc7', 'fc8'] assigned_sub_batches=1
+  idx=13 name=S13 category=drain active_pe=4 pe_span=PE0..PE3 active_blocks=['conv5', 'fc6', 'fc7', 'fc8'] assigned_sub_batches=0
+  idx=14 name=S14 category=drain active_pe=3 pe_span=PE0..PE2 active_blocks=['fc6', 'fc7', 'fc8'] assigned_sub_batches=0
+  idx=15 name=S15 category=drain active_pe=2 pe_span=PE0..PE1 active_blocks=['fc7', 'fc8'] assigned_sub_batches=0
+  idx=16 name=S16 category=drain active_pe=1 pe_span=PE0..PE0 active_blocks=['fc8'] assigned_sub_batches=0
+
+blocks(columns in ScT/MeT)
+  col=0 block=conv1
+  col=1 block=pool1
+  col=2 block=conv2
+  col=3 block=conv3
+  col=4 block=conv4
+  col=5 block=conv5
+  col=6 block=fc6
+  col=7 block=fc7
+  col=8 block=fc8
+
+block_dependencies(parent->child)
+  (0,1) conv1 -> pool1
+  (1,2) pool1 -> conv2
+  (2,3) conv2 -> conv3
+  (3,4) conv3 -> conv4
+  (4,5) conv4 -> conv5
+  (5,6) conv5 -> fc6
+  (6,7) fc6 -> fc7
+  (7,8) fc7 -> fc8
+
+ScT_cumulative(rows=state, cols=block)
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+1,1,1,1,0,0,0,0,0
+1,1,1,1,0,0,0,0,0
+1,1,1,1,0,0,0,0,0
+1,1,1,1,0,0,0,0,0
+1,1,1,1,0,0,0,0,0
+2,2,2,2,1,1,1,1,1
+2,2,2,2,1,1,1,1,1
+2,2,2,2,1,1,1,1,1
+2,2,2,2,1,1,1,1,1
+2,2,2,2,2,2,2,2,2
+2,2,2,2,2,2,2,2,2
+2,2,2,2,2,2,2,2,2
+2,2,2,2,2,2,2,2,2
+2,2,2,2,2,2,2,2,2
+
+ScT_delta_per_state(rows=state, cols=block)
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+1,1,1,1,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+1,1,1,1,1,1,1,1,1
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,1,1,1,1,1
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+
+MeT_S(rows=state, cols=block)
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+1,1,1,0,0,0,0,0,0
+1,1,1,0,0,0,0,0,0
+1,1,1,0,0,0,0,0,0
+1,1,1,0,0,0,0,0,0
+1,1,1,0,0,0,0,0,0
+2,2,2,1,1,1,1,1,1
+2,2,2,1,1,1,1,1,1
+2,2,2,1,1,1,1,1,1
+2,2,2,1,1,1,1,1,1
+2,2,2,2,2,2,2,2,2
+2,2,2,2,2,2,2,2,2
+2,2,2,2,2,2,2,2,2
+2,2,2,2,2,2,2,2,2
+2,2,2,2,2,2,2,2,2
+
+MeT_D(rows=state, cols=block)
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0
+1,1,1,0,0,0,0,0,0
+1,1,1,0,0,0,0,0,0
+1,1,1,0,0,0,0,0,0
+1,1,1,0,0,0,0,0,0
+1,1,1,0,0,0,0,0,0
+2,2,2,1,1,1,1,1,1
+2,2,2,1,1,1,1,1,1
+2,2,2,1,1,1,1,1,1
+2,2,2,1,1,1,1,1,1
+2,2,2,2,2,2,2,2,2
+2,2,2,2,2,2,2,2,2
+2,2,2,2,2,2,2,2,2
+2,2,2,2,2,2,2,2,2
+2,2,2,2,2,2,2,2,2
+
+block_to_state_mapping
+  conv1: S3:+1 S8:+1
+  pool1: S3:+1 S8:+1
+  conv2: S3:+1 S8:+1
+  conv3: S3:+1 S8:+1
+  conv4: S8:+1 S12:+1
+  conv5: S8:+1 S12:+1
+  fc6: S8:+1 S12:+1
+  fc7: S8:+1 S12:+1
+  fc8: S8:+1 S12:+1
