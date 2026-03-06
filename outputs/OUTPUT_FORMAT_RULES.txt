@@ -1,0 +1,8 @@
+Output format rule:
+1) All generated text files must be UTF-8 encoding.
+2) Line ending must be LF (\n).
+3) File must not contain NUL byte (\x00).
+
+Usage:
+  .\.venv\Scripts\python.exe tools\normalize_outputs.py outputs
+  .\.venv\Scripts\python.exe tools\normalize_outputs.py outputs --check
