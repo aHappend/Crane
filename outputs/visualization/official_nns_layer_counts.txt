@@ -1,0 +1,22 @@
+official_nns_layer_counts (from official src/nns definitions)
+
+Note: counts are raw network-layer definitions from official code paths (before any scheduler block merge).
+
+alexnet: layers=19, source=src/nns/alexnet.cpp
+BERT_block: layers=44, source=src/nns/llm.cpp
+darknet19: layers=25, source=src/nns/darknet19.cpp
+densenet: layers=126, source=src/nns/densenet.cpp
+gnmt: layers=82, source=src/nns/gnmt.cpp
+googlenet: layers=72, source=src/nns/googlenet.cpp
+GPT2_decode_block: layers=65, source=src/nns/llm.cpp
+GPT2_prefill_block: layers=62, source=src/nns/llm.cpp
+inception_resnet_v1: layers=153, source=src/nns/incep_resnet.cpp
+lstm: layers=74, source=src/nns/gnmt.cpp
+PNASNet: layers=603, source=src/nns/pnasnet.cpp
+resnet101: layers=140, source=src/nns/resnet.cpp
+resnet152: layers=208, source=src/nns/resnet.cpp
+resnet50: layers=72, source=src/nns/resnet.cpp
+transformer: layers=471, source=src/nns/transformer.cpp
+transformer_cell: layers=81, source=src/nns/transformer.cpp
+vgg19: layers=21, source=src/nns/vgg.cpp
+zfnet: layers=11, source=src/nns/zfnet.cpp

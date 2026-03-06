@@ -1,0 +1,431 @@
+﻿from __future__ import annotations
+
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+OUT_DIR = ROOT / "outputs" / "visualization"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+networks = [
+    {
+        "name": "alexnet",
+        "source": "src/nns/alexnet.cpp",
+        "layers": 19,
+        "note": "Dual-path AlexNet variant in official source (a/b branches).",
+        "stages": [
+            ["conv1 split", 2],
+            ["pool1", 2],
+            ["conv2", 2],
+            ["pool2", 2],
+            ["conv3", 2],
+            ["conv4", 2],
+            ["conv5", 2],
+            ["pool3", 2],
+            ["fc", 3],
+        ],
+        "nodes": [
+            ["input", "Input", 0, 100],
+            ["c1a", "conv1_a", 140, 50],
+            ["c1b", "conv1_b", 140, 150],
+            ["mid", "Dual conv/pool blocks", 340, 100],
+            ["fc", "fc1/fc2/fc3", 560, 100],
+        ],
+        "edges": [["input", "c1a"], ["input", "c1b"], ["c1a", "mid"], ["c1b", "mid"], ["mid", "fc"]],
+    },
+    {
+        "name": "darknet19",
+        "source": "src/nns/darknet19.cpp",
+        "layers": 25,
+        "note": "Sequential conv/pool stack + final avg pool.",
+        "stages": [["conv+pool stack", 24], ["pool_avg", 1]],
+        "nodes": [["a", "conv/pool body", 120, 100], ["b", "pool_avg", 360, 100]],
+        "edges": [["a", "b"]],
+    },
+    {
+        "name": "densenet",
+        "source": "src/nns/densenet.cpp",
+        "layers": 126,
+        "note": "layer_num_list = [6, 12, 24, 16], each dense layer contributes two conv ops.",
+        "stages": [
+            ["stem(conv0+pool0)", 2],
+            ["dense_block1", 12],
+            ["transition1", 2],
+            ["dense_block2", 24],
+            ["transition2", 2],
+            ["dense_block3", 48],
+            ["transition3", 2],
+            ["dense_block4", 32],
+            ["head(pool_avg+fc)", 2],
+        ],
+        "nodes": [["s", "stem", 80, 100], ["b1", "db1", 180, 100], ["b2", "db2", 280, 100], ["b3", "db3", 380, 100], ["b4", "db4", 480, 100], ["h", "head", 580, 100]],
+        "edges": [["s", "b1"], ["b1", "b2"], ["b2", "b3"], ["b3", "b4"], ["b4", "h"]],
+    },
+    {
+        "name": "gnmt",
+        "source": "src/nns/gnmt.cpp",
+        "layers": 82,
+        "note": "gen_lstm(8, true): 1 embed + 8*(9 LSTM ops + 1 residual add) + 1 output.",
+        "stages": [["word_embed", 1], ["8x GNMT block", 72], ["8x residual add", 8], ["Wd", 1]],
+        "nodes": [["e", "word_embed", 100, 100], ["g", "8 GNMT blocks", 320, 100], ["o", "Wd", 540, 100]],
+        "edges": [["e", "g"], ["g", "o"]],
+    },
+    {
+        "name": "lstm",
+        "source": "src/nns/gnmt.cpp",
+        "layers": 74,
+        "note": "gen_lstm(8, false): residual add removed.",
+        "stages": [["word_embed", 1], ["8x LSTM block", 72], ["Wd", 1]],
+        "nodes": [["e", "word_embed", 120, 100], ["g", "8 LSTM blocks", 360, 100], ["o", "Wd", 580, 100]],
+        "edges": [["e", "g"], ["g", "o"]],
+    },
+    {
+        "name": "googlenet",
+        "source": "src/nns/googlenet.cpp",
+        "layers": 72,
+        "note": "9 inception modules; each add_inception() builds 7 layers in source.",
+        "stages": [["stem", 5], ["inception 3a/3b", 14], ["inception 4a..4e", 35], ["inception 5a/5b", 14], ["head", 4]],
+        "nodes": [["s", "stem", 70, 100], ["i3", "Inception-3", 210, 100], ["i4", "Inception-4", 350, 100], ["i5", "Inception-5", 490, 100], ["h", "head", 620, 100]],
+        "edges": [["s", "i3"], ["i3", "i4"], ["i4", "i5"], ["i5", "h"]],
+    },
+    {
+        "name": "inception_resnet_v1",
+        "source": "src/nns/incep_resnet.cpp",
+        "layers": 153,
+        "note": "Stem + 5xA + ReductionA + 10xB + ReductionB + 5xC + head.",
+        "stages": [["Stem", 7], ["5x Inception-ResNet-A", 40], ["Reduction-A", 5], ["10x Inception-ResNet-B", 60], ["Reduction-B", 8], ["5x Inception-ResNet-C", 30], ["head", 3]],
+        "nodes": [["s", "Stem", 50, 100], ["a", "5xA", 160, 100], ["ra", "Red-A", 260, 100], ["b", "10xB", 370, 100], ["rb", "Red-B", 470, 100], ["c", "5xC", 570, 100], ["h", "Head", 670, 100]],
+        "edges": [["s", "a"], ["a", "ra"], ["ra", "b"], ["b", "rb"], ["rb", "c"], ["c", "h"]],
+    },
+    {
+        "name": "resnet50",
+        "source": "src/nns/resnet.cpp",
+        "layers": 72,
+        "note": "seg_lens_50 = [3,4,6,3] in official source.",
+        "stages": [["stem", 2], ["stage2", 13], ["stage3", 17], ["stage4", 25], ["stage5", 13], ["head", 2]],
+        "nodes": [["s", "stem", 70, 100], ["s2", "stage2", 190, 100], ["s3", "stage3", 310, 100], ["s4", "stage4", 430, 100], ["s5", "stage5", 550, 100], ["h", "head", 670, 100]],
+        "edges": [["s", "s2"], ["s2", "s3"], ["s3", "s4"], ["s4", "s5"], ["s5", "h"]],
+    },
+    {
+        "name": "resnet101",
+        "source": "src/nns/resnet.cpp",
+        "layers": 140,
+        "note": "seg_lens_101 = [3,4,23,3].",
+        "stages": [["stem", 2], ["stage2", 13], ["stage3", 17], ["stage4", 93], ["stage5", 13], ["head", 2]],
+        "nodes": [["s", "stem", 70, 100], ["s2", "stage2", 190, 100], ["s3", "stage3", 310, 100], ["s4", "stage4(23 blocks)", 460, 100], ["s5", "stage5", 620, 100], ["h", "head", 730, 100]],
+        "edges": [["s", "s2"], ["s2", "s3"], ["s3", "s4"], ["s4", "s5"], ["s5", "h"]],
+    },
+    {
+        "name": "resnet152",
+        "source": "src/nns/resnet.cpp",
+        "layers": 208,
+        "note": "seg_lens_152 = [3,8,36,3].",
+        "stages": [["stem", 2], ["stage2", 13], ["stage3", 33], ["stage4", 145], ["stage5", 13], ["head", 2]],
+        "nodes": [["s", "stem", 70, 100], ["s2", "stage2", 190, 100], ["s3", "stage3(8 blocks)", 340, 100], ["s4", "stage4(36 blocks)", 520, 100], ["s5", "stage5", 690, 100], ["h", "head", 790, 100]],
+        "edges": [["s", "s2"], ["s2", "s3"], ["s3", "s4"], ["s4", "s5"], ["s5", "h"]],
+    },
+    {
+        "name": "vgg19",
+        "source": "src/nns/vgg.cpp",
+        "layers": 21,
+        "note": "In this official file, FC layers are commented out; only conv/pool are active.",
+        "stages": [["conv1..conv16", 16], ["pool1..pool5", 5]],
+        "nodes": [["c", "conv stack", 190, 100], ["p", "pool stack", 460, 100]],
+        "edges": [["c", "p"]],
+    },
+    {
+        "name": "zfnet",
+        "source": "src/nns/zfnet.cpp",
+        "layers": 11,
+        "note": "Sequential conv/pool then FC layers.",
+        "stages": [["conv+pool", 8], ["fc1..fc3", 3]],
+        "nodes": [["a", "conv/pool", 180, 100], ["b", "fc", 460, 100]],
+        "edges": [["a", "b"]],
+    },
+    {
+        "name": "transformer",
+        "source": "src/nns/transformer.cpp",
+        "layers": 471,
+        "note": "6 encoders + 6 decoders in official transformer definition.",
+        "stages": [["word_embed_enc", 1], ["6x encoder", 162], ["word_embed_dec", 1], ["6x decoder", 306], ["proj", 1]],
+        "nodes": [["e", "embed enc", 80, 100], ["enc", "6 encoders", 240, 100], ["d", "embed dec", 400, 100], ["dec", "6 decoders", 560, 100], ["p", "proj", 710, 100]],
+        "edges": [["e", "enc"], ["enc", "d"], ["d", "dec"], ["dec", "p"]],
+    },
+    {
+        "name": "transformer_cell",
+        "source": "src/nns/transformer.cpp",
+        "layers": 81,
+        "note": "Single encoder + single decoder cell network.",
+        "stages": [["word_embed_enc", 1], ["1x encoder", 27], ["word_embed_dec", 1], ["1x decoder", 51], ["proj", 1]],
+        "nodes": [["e", "embed enc", 80, 100], ["enc", "encoder", 240, 100], ["d", "embed dec", 400, 100], ["dec", "decoder", 560, 100], ["p", "proj", 710, 100]],
+        "edges": [["e", "enc"], ["enc", "d"], ["d", "dec"], ["dec", "p"]],
+    },
+    {
+        "name": "BERT_block",
+        "source": "src/nns/llm.cpp",
+        "layers": 44,
+        "note": "Official file provides one-block version (full 24-block model is commented out).",
+        "stages": [["word_embed", 1], ["1x transformer block", 42], ["proj", 1]],
+        "nodes": [["e", "embed", 150, 100], ["b", "1 block", 400, 100], ["p", "proj", 650, 100]],
+        "edges": [["e", "b"], ["b", "p"]],
+    },
+    {
+        "name": "GPT2_prefill_block",
+        "source": "src/nns/llm.cpp",
+        "layers": 62,
+        "note": "Official file provides one-block prefill variant.",
+        "stages": [["word_embed", 1], ["1x transformer block(prefill)", 60], ["proj", 1]],
+        "nodes": [["e", "embed", 150, 100], ["b", "1 block(prefill)", 400, 100], ["p", "proj", 650, 100]],
+        "edges": [["e", "b"], ["b", "p"]],
+    },
+    {
+        "name": "GPT2_decode_block",
+        "source": "src/nns/llm.cpp",
+        "layers": 65,
+        "note": "Official file provides one-block decode variant.",
+        "stages": [["word_embed", 1], ["1x transformer block(decode)", 63], ["proj", 1]],
+        "nodes": [["e", "embed", 150, 100], ["b", "1 block(decode)", 400, 100], ["p", "proj", 650, 100]],
+        "edges": [["e", "b"], ["b", "p"]],
+    },
+    {
+        "name": "PNASNet",
+        "source": "src/nns/pnasnet.cpp",
+        "layers": 603,
+        "note": "genNAS(..., nCells=12) with stem1/stem2 and searched cell ops from official genotype.",
+        "stages": [["conv0", 1], ["stem1", 43], ["stem2", 45], ["12x cells", 511], ["head", 3]],
+        "nodes": [["c0", "conv0", 80, 100], ["s1", "stem1", 220, 100], ["s2", "stem2", 360, 100], ["cs", "12 cells", 530, 100], ["h", "head", 700, 100]],
+        "edges": [["c0", "s1"], ["s1", "s2"], ["s2", "cs"], ["cs", "h"]],
+    },
+]
+
+# Write txt summary
+summary_txt = OUT_DIR / "official_nns_layer_counts.txt"
+lines = []
+lines.append("official_nns_layer_counts (from official src/nns definitions)")
+lines.append("")
+lines.append("Note: counts are raw network-layer definitions from official code paths (before any scheduler block merge).")
+lines.append("")
+for item in sorted(networks, key=lambda x: x["name"].lower()):
+    lines.append(f"{item['name']}: layers={item['layers']}, source={item['source']}")
+summary_txt.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+# Build HTML
+html = f"""<!doctype html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <title>Official NNS Structure Viewer</title>
+  <style>
+    :root {{
+      --bg: #f4f6f9;
+      --card: #ffffff;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --line: #d1d5db;
+      --accent: #0f766e;
+      --accent-2: #115e59;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; font-family: "Segoe UI", Tahoma, sans-serif; background: var(--bg); color: var(--ink); }}
+    .wrap {{ max-width: 1200px; margin: 24px auto; padding: 0 16px; }}
+    .head {{ display: flex; justify-content: space-between; align-items: end; gap: 12px; }}
+    h1 {{ margin: 0; font-size: 24px; }}
+    .sub {{ color: var(--muted); font-size: 14px; margin-top: 6px; }}
+    .grid {{ margin-top: 16px; display: grid; grid-template-columns: 320px 1fr; gap: 16px; }}
+    .card {{ background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }}
+    label {{ font-size: 13px; color: var(--muted); display: block; margin-bottom: 6px; }}
+    select {{ width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+    th, td {{ border-bottom: 1px solid var(--line); padding: 8px 6px; font-size: 13px; text-align: left; }}
+    th {{ color: var(--muted); font-weight: 600; }}
+    .kvs {{ display: grid; grid-template-columns: 160px 1fr; gap: 8px; font-size: 14px; }}
+    .k {{ color: var(--muted); }}
+    .mono {{ font-family: Consolas, "Courier New", monospace; }}
+    .note {{ margin-top: 10px; color: #374151; font-size: 13px; background: #f0fdfa; border: 1px solid #99f6e4; padding: 8px; border-radius: 8px; }}
+    svg {{ width: 100%; height: 260px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }}
+    .foot {{ margin-top: 12px; color: var(--muted); font-size: 12px; }}
+    .legend {{ font-size: 12px; color: var(--muted); margin-top: 8px; }}
+    .btnrow {{ margin-top: 10px; display: flex; gap: 8px; }}
+    button {{ border: 1px solid var(--accent); background: var(--accent); color: #fff; padding: 8px 10px; border-radius: 8px; cursor: pointer; }}
+    button.alt {{ background: #fff; color: var(--accent-2); }}
+    @media (max-width: 980px) {{ .grid {{ grid-template-columns: 1fr; }} }}
+  </style>
+</head>
+<body>
+  <div class=\"wrap\">
+    <div class=\"head\">
+      <div>
+        <h1>Official NNS Structure Viewer</h1>
+        <div class=\"sub\">Raw official network structure and layer counts from <span class=\"mono\">src/nns/*.cpp</span> (before scheduler block merge)</div>
+      </div>
+    </div>
+
+    <div class=\"grid\">
+      <div class=\"card\">
+        <label for=\"netSelect\">Network</label>
+        <select id=\"netSelect\"></select>
+
+        <table id=\"countTable\">
+          <thead><tr><th>Network</th><th>Layers</th></tr></thead>
+          <tbody></tbody>
+        </table>
+
+        <div class=\"btnrow\">
+          <button id=\"copyBtn\">Copy Current Count</button>
+          <button id=\"copyAllBtn\" class=\"alt\">Copy All Counts</button>
+        </div>
+      </div>
+
+      <div class=\"card\">
+        <div class=\"kvs\">
+          <div class=\"k\">Network</div><div id=\"vName\" class=\"mono\"></div>
+          <div class=\"k\">Source</div><div id=\"vSource\" class=\"mono\"></div>
+          <div class=\"k\">Layer Count</div><div id=\"vLayers\"></div>
+        </div>
+        <div id=\"vNote\" class=\"note\"></div>
+
+        <h3>Stage Breakdown</h3>
+        <table>
+          <thead><tr><th>Stage</th><th>Layers</th></tr></thead>
+          <tbody id=\"stageBody\"></tbody>
+        </table>
+
+        <h3>Structure Graph (stage-level)</h3>
+        <svg id=\"graph\" viewBox=\"0 0 860 260\"></svg>
+        <div class=\"legend\">This graph is a stage-level abstraction of official source topology; no scheduler block merge is applied here.</div>
+      </div>
+    </div>
+
+    <div class=\"foot\">Generated by <span class=\"mono\">tools/generate_official_nns_visualization.py</span></div>
+  </div>
+
+  <script>
+    const networks = {json.dumps(networks, ensure_ascii=False)};
+
+    const select = document.getElementById('netSelect');
+    const tbody = document.querySelector('#countTable tbody');
+    const vName = document.getElementById('vName');
+    const vSource = document.getElementById('vSource');
+    const vLayers = document.getElementById('vLayers');
+    const vNote = document.getElementById('vNote');
+    const stageBody = document.getElementById('stageBody');
+    const svg = document.getElementById('graph');
+
+    function esc(s) {{
+      return String(s).replace(/[&<>\"]/g, c => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}}[c]));
+    }}
+
+    function drawGraph(item) {{
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+      const byId = Object.fromEntries(item.nodes.map(n => [n[0], n]));
+
+      item.edges.forEach(([a, b]) => {{
+        const na = byId[a], nb = byId[b];
+        if (!na || !nb) return;
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', na[2] + 90);
+        line.setAttribute('y1', na[3]);
+        line.setAttribute('x2', nb[2] - 90);
+        line.setAttribute('y2', nb[3]);
+        line.setAttribute('stroke', '#94a3b8');
+        line.setAttribute('stroke-width', '2');
+        svg.appendChild(line);
+      }});
+
+      item.nodes.forEach(([id, label, x, y]) => {{
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', x - 90);
+        rect.setAttribute('y', y - 28);
+        rect.setAttribute('rx', '10');
+        rect.setAttribute('ry', '10');
+        rect.setAttribute('width', '180');
+        rect.setAttribute('height', '56');
+        rect.setAttribute('fill', '#ffffff');
+        rect.setAttribute('stroke', '#0f766e');
+        rect.setAttribute('stroke-width', '2');
+        g.appendChild(rect);
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', x);
+        text.setAttribute('y', y + 4);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('font-size', '13');
+        text.setAttribute('fill', '#1f2937');
+        text.textContent = label;
+        g.appendChild(text);
+
+        svg.appendChild(g);
+      }});
+    }}
+
+    function render(name) {{
+      const item = networks.find(x => x.name === name) || networks[0];
+      if (!item) return;
+
+      vName.textContent = item.name;
+      vSource.textContent = item.source;
+      vLayers.textContent = String(item.layers);
+      vNote.textContent = item.note;
+
+      stageBody.innerHTML = '';
+      item.stages.forEach(([stage, cnt]) => {{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${{esc(stage)}}</td><td>${{cnt}}</td>`;
+        stageBody.appendChild(tr);
+      }});
+
+      drawGraph(item);
+      select.value = item.name;
+    }}
+
+    function init() {{
+      networks
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .forEach(item => {{
+          const opt = document.createElement('option');
+          opt.value = item.name;
+          opt.textContent = `${{item.name}} (${{item.layers}})`;
+          select.appendChild(opt);
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td class=\"mono\">${{esc(item.name)}}</td><td>${{item.layers}}</td>`;
+          tbody.appendChild(tr);
+        }});
+
+      select.addEventListener('change', () => render(select.value));
+
+      document.getElementById('copyBtn').addEventListener('click', async () => {{
+        const item = networks.find(x => x.name === select.value);
+        if (!item) return;
+        const text = `${{item.name}}: layers=${{item.layers}}, source=${{item.source}}`;
+        try {{ await navigator.clipboard.writeText(text); }} catch (_) {{}}
+      }});
+
+      document.getElementById('copyAllBtn').addEventListener('click', async () => {{
+        const text = networks
+          .slice().sort((a,b)=>a.name.localeCompare(b.name))
+          .map(x => `${{x.name}}: layers=${{x.layers}}, source=${{x.source}}`)
+          .join('\\n');
+        try {{ await navigator.clipboard.writeText(text); }} catch (_) {{}}
+      }});
+
+      render(networks.slice().sort((a, b) => a.name.localeCompare(b.name))[0].name);
+    }}
+
+    init();
+  </script>
+</body>
+</html>
+"""
+
+html_path = OUT_DIR / "official_nns_structure.html"
+html_path.write_text(html, encoding="utf-8", newline="\n")
+
+print(html_path)
+print(summary_txt)
+
