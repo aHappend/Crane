@@ -1,0 +1,577 @@
+PDF: C:\Users\Happend Outerwall\Documents\xwechat_files\wxid_qrjemeh2xdvj22_da41\msg\file\2026-03\3725843.3756023.pdf
+
+===== Page 1 =====
+RESEARCH-ARTICLE
+YU GONG, Rutgers University–New Brunswick, New Brunswick, NJ, United States
+LINGYI HUANG, Rutgers University–New Brunswick, New Brunswick, NJ, United States
+HAODONG CHANG, Texas A&M University, College Station, TX, United States
+RONGJIAN LIANG, NVIDIA, Santa Clara, CA, United States
+CHENG YANG, Rutgers University–New Brunswick, New Brunswick, NJ, United States
+ZHEXIANG TANG, Rutgers University–New Brunswick, New Brunswick, NJ, United States
+
+===== Page 2 =====
+on heuristic search algorithms with poor convergence.
+framework that addresses these gaps through a hierarchical table-
+mulates scheduling as a mathematically structured optimization
+scheduling space. Evaluations show that Crane reduces energy-
+at least 2.82× over state-of-the-art baselines.
+widely adopted in real-world applications for energy-efficient exe-
+
+===== Page 3 =====
+aiming to maximize hardware utilization and energy efficiency. As
+research attention [5, 9, 13, 38, 40].
+execution scheme, fusion strategy, recomputation, and batch split-
+ting—even state-of-the-art solutions fail to comprehensively explore
+integration of recomputation as a core design factor for training op-
+processing orders for cross-layer sub-batches, support limited to
+handle training workloads. Third, the underlying search engines of
+which essentially sample the search space with slow convergence.
+suboptimal scheduling performance and slower scheduling speed.
+formulates the scheduling problem as a structured optimization
+linear programming (MILP) solver. Evaluation results (Section 7)
+show that Crane achieves a 1.13× to 21.01× reduction in energy-
+compared to state-of-the-art solutions.
+lizes all the computational resources and on-chip memory ;Pipeline:
+in a pipelined fashion, sharing the hardware tiles across layers;
+Search
+Search Space
+Checkmate R MILP
+Crane E+F+R+B MILP
+tion, and sub-batch splitting, respectively.
+ii) The search spaces is for 𝑛-layer model with batch size of 𝑚.
+lated Annealing; MILP: Mixed-Integer Linear Programming
+scenario of pipeline, the mapped group of tiles for one layer sends
+3) Recomputation Scheme. This strategy decides the protocol
+ditional computation for reduction in storage, the recomputation
+size. Applying recomputation in this context enables the training of
+
+===== Page 4 =====
+search algorithms they employ, and their target deployment sce-
+explore all four key design factors. As shown in Table 1, even state-
+lack support for recomputation schemes (R), resulting in limited or
+Checkmate [15] incorporates recomputation strategies, it does not
+in search algorithms and representation frameworks. Addition-
+than the sub-batch level (B), significantly constraining its schedul-
+of sub-batches across layers is strictly tied to the batch-level ex-
+sub-batch Layer-A, Layer-B and Layer-C is set to a pipeline pattern,
+the identified sub-batch-level processing order can only be 𝐴1 →
+this rigid constraint significantly narrows the design space and
+overcomes the rigid batch-level scheduling constraint by allow-
+ing layer partitioning along arbitrary dimensions, it has two key
+port training workloads. Partitioning along non-batch dimensions
+Challenge #3. Incomplete and Inefficient Search.Most state-
+of-the-art inter-layer schedulers rely on heuristic search algorithms,
+coverage: the search procedures do not comprehensively explore the
+lowers DRAM capacity by introducing recomputation (R), while hav-
+DRAM capacity through comprehensive optimization strategies.
+These methods inherently risk missing globally optimal solutions.
+heuristics converge slowly, resulting in long search times even for
+ple, automatic exploration of recomputation strategies requires
+and layers—something that the resource allocation (RA) tree-based
+which imposes rigid scheduling constraints. In the case of TileFlow,
+tally shapes the form and tractability of the optimization problem.
+Existing works fail to produce well-structured objectives—they
+optimization and must instead rely on heuristic, sampling-based
+search with slow convergence and no guarantee of solution quality.
+
+===== Page 5 =====
+Hierarchical Representation
+identify and generalize a novel hierarchical representation, where
+the execution scheme at each hierarchical level is modeled as a
+subset of a pipeline scheme. This hierarchical structure offers suf-
+(DAG), given sufficient hierarchical depth.
+tation enables the scheduling problem to be formulated as a MILP.
+The linear constraints and clearly defined decision variables of the
+table representation allow the use of mature MILP solvers, enabling
+faster convergence compared to heuristic methods.
+4 Hierarchical Representation of Scheduling
+representation is the concept of Execution State, which captures
+the execution involves exactly two distinct States: initially, only
+Layer-1 is active (State-1), followed by a stage where only Layer-
+2 is active (State-3). In contrast, when the layers are processed
+State – both Layer-1 and Layer-2 are active simultaneously (State-2).
+Finally, in the case of pipeline processing, the execution progresses
+through three distinct States, involving Layer-1 alone, then both
+States (State-1, State-2, and State-3) occur over time.
+Notably, from the earlier example, we observe that the pipeline
+pattern naturally encompasses all execution states that also appear
+in the sequential and parallel patterns. This suggests that pipeline
+PipelineTime121Tiles2
+State-1State-3State-2State-1 State-2 State-31:State-121:State-22:State-3DerivationPipeline format
+Figure 2: Derive states of execution scheme from pipeline pattern.
+TilesA4A4 AState-1A4State-24State-3Pipeline formatDerivation
+Tiles1321231State-112State-2State-312332State-43State-5
+Pipeline formatDerivation123
+Active State
+ActiveState
+Figure 3: The states of complex execution scheme of a 4-layer model
+can be derived from pipeline pattern in a hierarchical manner.
+model with a more intricate sub-batch-level scheduling scheme.
+follows a pipeline pattern between block A and Layer-4. All exe-
+cution states involved in this 2-block view correspond to standard
+pipeline-derived states. Looking inside block A, its internal sched-
+uling consists of four distinct execution states: (1) a state where
+only Layer-1 is active; (2) a state where Layer-1 and Layer-2 are
+active concurrently; (3) a state where Layer-2 and Layer-3 are active
+concurrently; and (4) a state where only Layer-3 is active. When
+we arrange Layer-1 through Layer-3 in a pure pipeline fashion, we
+observe five distinct pipeline-derived execution states. Crucially,
+the four states actually used within block A are all included in
+this set of five, reinforcing the observation that pipeline-derived
+execution states are expressive enough to represent even irregular
+Hierarchical Generalization. This hierarchical interpretation
+
+===== Page 6 =====
+into multiple hierarchical levels. While the interaction between
+that the execution states involved – regardless of complexity – are
+drawn from, or are subsets of, those generated by canonical pipeline
+scheduling. This reinforces the role of the pipeline pattern not only
+𝐵𝑆𝑠𝑢𝑏 Sub-batch size
+H Hierarchical block structure over L
+S𝐵 State index set of block 𝐵: {1, . . . , 2𝑁 − 1}
+J𝑖 Sub-blocks active in state-𝑖
+𝑠𝑖 State workload: number of sub-batches processed in state-𝑖
+A𝐵′ Set of states where sub-block 𝐵′ is active
+LJ𝑖 Layers active in state-𝑖
+Aℓ States where layer ℓ is active
+Observation 1. With sufficient hierarchical abstraction, complex
+represented by execution states derived from the pipeline pattern.
+This highlights pipeline scheduling as a unifying structural basis for
+Definition 2 (State). Let 𝐵 be a block with an ordered sequence
+through a set of pipeline-derived execution states, indexed byS𝐵 =
+Each state index 𝑖 ∈ S𝐵 is associated with:
+(ii) a non-negative scalar 𝑠𝑖 ∈ R≥0, called the state workload ,
+representing the number of sub-batches processed during
+State-𝑖. These scalars will participate in a later formulation of
+scheduling constraints.
+Definition 3 (Involved State Set ). Let 𝐵 be a block with sub-
+block sequence C𝐵 = {𝐵1, 𝐵2, . . . , 𝐵𝑁 } and state index set S𝐵 =
+{1, 2, . . . , 2𝑁 −1}. The involved state set of an entity specifies indices
+of all states where that entity is active during execution of 𝐵.
+(i) For a sub-block 𝐵′ ∈ C𝐵, the involved state set is:
+active in state 𝑖. The involved state set of layer ℓ is:
+Constraint 1 (Computation-Completeness). Let 𝐵 be a block
+with state set S𝐵 = {1, 2, . . . , 2𝑁 − 1}, and let 𝑠𝑖 ∈ R≥0 denote the
+state workload for each state 𝑖 ∈ S𝐵. Let L𝐵 be the set of all layers
+contained in block 𝐵, and let Aℓ ⊆ S 𝐵 denote the involved state
+The state workloads must satisfy the following constraint:
+where 𝐵𝑆 is the total batch size and 𝐵𝑆sub is the sub-batch size.
+distributed across the states in which it is active.
+sive capacity of the hierarchical scheduling abstraction. Specifically,
+a hierarchical block composition with pipeline-derived states.
+Theorem 1 (Universality of Hierarchical Block Representa-
+a DAG structure can be represented using a hierarchical block
+composition equipped with pipeline-derived execution states and
+struct a hierarchical representation by traversing 𝐺 topologically.
+one (branching or merging points), we partition 𝐺 and encapsulate
+yields the top-level hierarchical block 𝐵⊤.
+blocks C𝐵 = {𝐵1, . . . , 𝐵𝑁 }, with canonical pipeline state set S𝐵 =
+execution schemes—sequential, pipelined, parallel, or combinations
+
+===== Page 7 =====
+behavior. These examples show workload assignments across state
+schedules can be represented via hierarchical block abstraction. □
+hierarchical block abstraction.
+can be represented through hierarchical blocks and pipeline-derived
+states, we now formulate the scheduling problem as a constrained
+optimization. This formulation captures both structural choices and
+• a hierarchical block structure H, which recursively parti-
+• a collection of state workloads {𝑠𝑖 }𝐵 ∈ H, 𝑖∈ S𝐵 , where each
+𝑠𝑖 ∈ R≥0 corresponds to a pipeline-derived execution state
+Here, C (H, {𝑠𝑖 }) denotes the energy-delay product (EDP) of model
+execution, and Aℓ is involved state set of layer ℓ, as defined earlier.
+Scheduling). The hierarchical block abstraction, through its pipeline-
+derived states and flexible workload assignments, supports diverse
+sub-batch execution patterns—sequential, pipelined, or parallel. It
+configuration within each block, and selecting the hierarchical
+its local execution states, while the block hierarchy implicitly de-
+optimization of hierarchical block structure.
+Recording State Information Using the Scheduling Table. As
+through combinations of execution states and their associated work-
+called the Scheduling Table (ScT). This provides a structured and
+cumulative view of how sub-batch workloads are distributed across
+execution states and sub-blocks, offering a more intuitive and ana-
+lyzable form than listing state variables directly.
+Definition 4 (Scheduling Table (ScT)). For a block 𝐵 with sub-
+block sequence C𝐵 = {𝐵1, 𝐵2, . . . , 𝐵𝑁 } and pipeline-derived state
+set S𝐵 = {1, . . . , 2𝑁 − 1}, the scheduling table ScT ∈ R(2𝑁 −1) ×𝑁
+records the cumulative number of sub-batches processed by each
+sub-block across states.
+(i) ScT has 2𝑁 − 1 rows and 𝑁 columns. Row 𝑖 corresponds to
+State-𝑖, and column 𝑗 corresponds to sub-block 𝐵 𝑗 ∈ C𝐵.
+(ii) The entry ScT𝑖,𝑗 denotes the total number of sub-batches pro-
+cessed by sub-block 𝐵 𝑗 from State-1 through State-𝑖, inclusive.
+(iii) Let A𝐵 𝑗 ⊆ S𝐵 denote the involved state set of sub-block 𝐵 𝑗 .
+The cumulative processed sub-batches for 𝐵 𝑗 up to State-𝑖 is
+ScT𝑖,𝑗 =
+Constraint-Form Equivalence of Definition 5. As illustrated
+above, ScT𝑖,𝑗 are derived according to Definition 5. To enable inte-
+gration with our MILP formulation, we now express an equivalent
+set of constraints – Eqs. 1 through 6 – for computing ScT in a
+constraint-based format. Eq. 1 ensures that all entries in ScT are
+mulated sub-batch processing for each sub-block. Eq. 5 encodes data
+are not assigned to overlapping states in a parallel pattern. Finally,
+Eq. 6 describes the cumulative accumulation of sub-batch workloads
+across states, consistent with the semantics of ScT.
+ScT𝑖,𝑗 ∈ N ∪ { 0} (1)
+ScT𝑖,𝑗 = 0, 𝑖 ∈ [ 1, . . . , 𝑗 − 1] (2)
+ScT𝑖,𝑗 = 𝐵𝑆 /𝐵𝑆sub, 𝑖 ∈ [ 𝑁 + 𝑗 − 1, . . . , 2𝑁 − 1] (3)
+ScT𝑖+1,𝑗 ≥ ScT𝑖,𝑗 (4)
+ScT𝑖,𝑚 ≥ ScT𝑖,𝑗 + 𝑑𝑚,𝑗 , 𝑖 ∈ [ 𝑗, . . . , 𝑁 + 𝑗 − 2] (5)
+ScT𝑖,𝑗 = 𝑠𝑖 + ScT𝑖 −1,𝑗 , 𝑖 ∈ [ 𝑗, . . . , 𝑁 + 𝑗 − 2] (6)
+While determining the state workloads {𝑠𝑖 } and constructing the
+scheduling table ScT fully specifies the execution scheme of a block,
+
+===== Page 8 =====
+MappingState-BasedRepresentation
+TimeState-1s1State-2State-NState-2N-1s2s2sNsNsNs2N-1…Block B # of Processed Sub-batches 00State 1 0State 1~2State 1~NState 1~2N-1
+……………s!+s" s"…s!+⋯+s"=BS/BS#$% s#s"+⋯+s#…BS/BS#$%BS/BS#$%BS/BS#$%…ScT
+Figure 4: State-based representation of execution scheme for mapping multiple layers onto a tiled architecture. The number of hardware tiles
+allocated to different layers within the same state is proportionally determined based on their computational costs.
+State
+Tiles1234State1State3(0:3](0:3]12
+State1ProcessingWritingState 3
+ScTMeT
+Maximum Index of Stored Sub-batchesMinimum Index of Stored Sub-batchesLayer Fusion Dataflow in SRAMDRAMSRAM in Tiles(0:3] in SRAM1ProcessingWriting
+# of Processed Sub-batches03State 103State 1~233State 1~312Min. Index of Stored Sub-batchesDSDSState10030DSDSState 20030DSDSState 30333
+PEs in TilesInput of Index: [1][2][3]1 Output of Index: [1][2][3]1Processing 2DRAMOutput of Index: [1][2][3]2StateTiles1234State1State3(0:3](0:3]12
+State1ProcessingWritingState 3ScTMeT
+PEs in TilesInput of Index: [1][2][3]1 Output of Index: [1][2][3]1Processing 2DRAMOutput of Index: [1][2][3]2MeT
+ScT
+Figure 5: Example that how MeT and ScT jointly and implicitly capture the impact of fusion strategy on memory status. The 2-layer model is
+a top-level block with each layer as a sub-block. In State-1, all 3 sub-batches of Layer-1’s input data are transferred from DRAM to PEs for
+computation. The resulting outputs are then stored in on-chip SRAM, avoiding costly DRAM writes. Consequently, SRAM holds 3 sub-batches
+of outputs (indexed as 1, 2, 3) for Layer-1, while DRAM stores none. This is reflected in ScT1,1 = 3, indicating that 3 sub-batches are processed
+in State-1. Meanwhile, MeT𝑆
+1,1 = 0 defines the stored sub-batch range in SRAM as (0 : 3 ], and MeT𝐷
+confirming no data is stored in DRAM. In State-3, the 3 sub-batches stored in SRAM are directly sent to PEs for Layer-2 processing, eliminating
+DRAM access. After computation, the 3 sub-batches of Layer-2’s output data are stored in DRAM, and Layer-1’s intermediate results are evicted
+from SRAM. This is represented by MeT𝐷
+3,2 = 0 and ScT3,2 = 3, defining the sub-batch range of Layer-2’s output in DRAM as (0 : 3 ]. Additionally,
+MeT𝑆
+3,2 = 3 indicates no Layer-2’s output remains in SRAM (3, 3]. Similarly, MeT𝑆
+3,1 = MeT𝐷
+in SRAM nor DRAM, precisely describing the final memory state.
+ments, which are not encoded in ScT alone.
+To model this dimension, we introduce the Memory Table MeT,
+ically, MeT captures the allocation and deallocation dynamics of
+sub-batch-level intermediate results for each execution unit (e.g.,
+Definition 5 (Memory Table (MeT)). For a block with sub-block
+sequence C𝐵 = {𝐵1, 𝐵2, . . . , 𝐵𝑁 } and state set S𝐵 = {1, . . . , 2𝑁 − 1},
+the memory table MeT ∈ R(2𝑁 −1) ×𝑁 ×2 tracks the memory status
+of intermediate data for each block or sub-block across states.
+(i) MeT has 2𝑁 −1 rows and 𝑁 columns, where row𝑖 corresponds
+to State-𝑖, and column 𝑗 corresponds to block 𝐵 𝑗 ∈ C𝐵.
+(ii) Each entry MeT𝑖,𝑗 is a tuple (MeT𝐷
+𝑖,𝑗 , MeT𝑆
+• MeT𝐷
+𝑖,𝑗 denotes the lower (open) bound of the sub-batch
+range stored in DRAM for sub-block 𝐵 𝑗 at State-𝑖;
+• MeT𝑆
+range stored in SRAM for sub-block 𝐵 𝑗 at State-𝑖.
+As defined above, MeT tracks the lower bound of sub-batches
+stored in memory. Meanwhile, ScT𝑖,𝑗 monitors the number of sub-
+batches processed for block 𝐵 𝑗 from State-1 to State-𝑖, effectively
+ScT and MeT together define the range of sub-batches stored in
+SRAM and DRAM, denoted as (MeT𝑆
+𝑖,𝑗 , ScT𝑖,𝑗 ] and (MeT𝐷
+𝑖,𝑗 , ScT𝑖,𝑗 ],
+mediate data in SRAM to reduce costly DRAM accesses, MeT and
+ScT jointly capture the impact of fusion on memory behavior.
+Construction of MeT. In general, MeT is derived by follow-
+the sub-batches stored in memory are non-negative integers. Eq. 9
+represented by ScT𝑖,𝑗 , which tracks the number of sub-batches
+the lower bounds as the state progresses, reflecting the policy that
+earlier sub-batches are discarded first when memory (SRAM or
+DRAM) capacity is insufficient to store all sub-batches. This is
+ated sub-batches can be discarded temporarily. When sub-block 𝐵 𝑗
+memory, the necessary data is available in the previous state. Specif-
+ically, since ScT𝑖 −1,𝑗 represents the upper bound of the sub-batch
+index processed by sub-block 𝐵 𝑗 in State-(𝑖 − 1), the corresponding
+lower bound in State-𝑖 must be less than or equal to MeT𝑆
+
+===== Page 9 =====
+MeTFWMin. Index of Stored Sub-batchesDSDSState 32323……
+(2:3](2:3]Equ.14# of Processed Sub-batches01State 101State 1~211State 1~3
+Min. Index of Stored Sub-batchesDSDSState 31111……Step 2# of Processed Sub-batches0001Status-12222Status-7
+Min. Index of Stored Sub-batchesDSDSDSDSStatus-722222222…………
+: RecomputationR2: BackwardB2
+ScTBW1MeTBW1
+ScTBW2 MeTBW2R1R2(0:2]Loss(0:2]
+State 1State 1~7State 7
+Figure 6: Recomputation Example. Consider a 2-layer model treated
+as a top-level block, with each layer as a sub-block. Suppose ScT3,1 =
+ScT3,2 = 3. After the forward pass, we have MeT𝐷
+3,1 = MeT𝐷
+cating that the sub-batch range stored in DRAM for both Layer-1 and
+ward propagation over sub-batch (2, 3], where the loss flows through
+pass and aligns with the optimization of ScT and MeT as defined in
+Eq. 14.In Step 2, recomputation is required for the evicted sub-batch
+DRAM, and forward recomputation is performed for both layers,
+workload also fits within the scheduling and memory optimization
+framework of ScT and MeT.
+MeT𝐷
+𝑉𝑗 represents the size of one sub-batch of sub-block 𝐵 𝑗 ’s output,
+and ScT𝑖,𝑗 − MeT𝑆
+𝑖,𝑗 and ScT𝑖,𝑗 − MeT𝐷
+sub-batches stored in SRAM and DRAM, respectively. These con-
+MeT𝑆
+𝑖,𝑗 ∈ N ∪ { 0} MeT𝐷
+𝑖,𝑗 ≤ MeT𝑆
+𝑖+1,𝑗 MeT𝐷
+𝑖,𝑗 ≤ MeT𝐷
+𝑖,𝑗 ≤ ScT𝑖,𝑗 MeT𝐷
+𝑖,𝑗 ≤ ScT𝑖,𝑗 (9)
+min(MeT𝑆
+𝑖 −1,𝑚, MeT𝐷
+𝑖 −1,𝑚 ) ≤ ScT𝑖 −1,𝑗 if 𝑑𝑚,𝑗 = 1 (10)
+(ScT𝑖,𝑗 − MeT𝑆
+(ScT𝑖,𝑗 − MeT𝐷
+5.3 Representation of Recomputation Scheme
+As analyzed in Section 2.1, recomputation is a critical decision
+Next we introduce how to use ScT and MeT to describe the re-
+recomputation strategy requires answering two key questions.
+Question #2 (How): How can forward recomputation be coordinated
+with backward pass in the context of sub-batch-based processing?
+ble checkpoint choices for recomputation in a 4-sub-batch-based
+ResNet-50. Fortunately, this extensive search space can be effec-
+tively integrated into the construction and optimization of ScT and
+MeT after the forward pass, as these two tables precisely track the
+sub-batches stored in SRAM and DRAM. In other words, once ScT
+and MeT are determined, the location and amount of activations to
+tion between forward recomputation and backward propagation,
+can be effectively described using ScT and MeT.
+in Fig. 6, after forward propagation, a new pair of ScT and MeT
+gating the sub-batches currently stored in DRAM. The goal in this
+forward recomputation in 𝐵𝑚 generates the required data. The
+the recomputation in Step-2 can always be performed prior to the
+backward computation, allowing ScT and MeT to represent the
+coupled recomputation and backward pass.
+pass (State-(2𝑁 − 1)), the amount of stored activation results for
+brings a new constraint when constructing MeT for forward pass:
+MeT𝐷,𝐹𝑊
+2𝑁 −1,𝑚 ≥ MeT𝐷,𝐹𝑊
+After optimizing forward-specificMeT(denoted asMeT𝐹𝑊 ) with
+constraints described in Eq. 7-12 and Eq. 13,ScT for Step-1, denoted
+as ScT𝐵𝑊 1, can be constructed using the same method as described
+Specifically, Eq. 1-6 still serve as the constraints for table construc-
+following constraint, considering the consumption of stored activa-
+tion incurred by pre-processing (note that the indices of sub-batches
+in Eq. 14 are offset for consistency with physical meaning ofScT𝑖,𝑗 ):
+ScT𝐵𝑊 1
+𝐵𝑆Sub − MeT𝐷,𝐹𝑊
+2𝑁 −1,𝑗 +1−𝐿 − MeT𝐷,𝐹𝑊
+Then, the corresponding MeT (MeT𝐵𝑊 1) can be derived from
+ScT𝐵𝑊 1, constrained by Eq. 7-12.
+Step-2: Forward Recomputation-then-Backward Pass.After
+Step-1, another pair of tables, denoted as ScT𝐵𝑊 2 and MeT𝐵𝑊 2,
+recomputation phase and the backward pass phase, respectively.
+
+===== Page 10 =====
+Notably, because in Step-2, recomputation is only performed to
+recover the previously discarded sub-batches of activation data, Eq.
+3 is replaced with the following constraint:
+ScT𝐵𝑊 2
+𝑖,𝑗 = MeT𝐷,𝐹𝑊
+where MeT𝐷,𝐹𝑊
+2𝑁 −1,𝑗 is the index of the first sub-batch of activation
+stored for sub-block 𝐵 𝑗 in State-(2𝑁 − 1) during forward propa-
+represents the index of the last sub-batch discarded.
+5.4 Latency & Energy Evaluation
+computation scheme using ScT and MeT, we can construct perfor-
+mance model to evaluate latency and energy for a given scheduling
+Latency Evaluation. The latency performance is modeled based
+Computation-incurred Latency. At the hardware tile granularity,
+the computation-incurred latency of each state is determined by
+processing one sub-batch, denoted as Workload𝑗 , is the number of
+we follow the method adopted in SET: For 𝑇𝑖,𝑗 tiles allocated for
+sub-block 𝐵 𝑗 in State-𝑖, the corresponding utilization ratio 𝑢𝑖,𝑗 is
+calculated by mapping the four dimensions (dim𝑞) of one sub-batch
+Then the computation latency of sub-block 𝐵 𝑗 in State-𝑖 is as:
+Since computation-incurred latency for a DNN in one state is deter-
+mined by the bottleneck sub-block in that state (as sub-blocks are
+processed concurrently within one state), and sub-block execution
+in different states happens sequentially, the overall computation-
+incurred latency 𝐿comp for the entire model can be calculated as:
+Note that Eq. 18 describes the latency evaluation for forward
+Data Traffic-incurred Latency.From the perspective of a hardware
+tile, the latency incurred by transferring its required input data
+latency can be evaluated as:
+ScT
+MeT ...
+MeT...
+MeT
+ScT ...
+Optimization
+Sub-batch Size
+Optimal Sub-
+Optimal ScT
+Optimal MeT
+Figure 7: Overall intra-block exploration and optimization process.
+where 𝑉𝑚 is the storage size for one sub-batch of data and the
+for data movement from sub-block 𝐵𝑚 to sub-block 𝐵 𝑗 in State-𝑖,
+Since ScT and MeT record all the computing and memory statuses
+latency for data sourced from DRAM is included in Eq. 19 since it
+Energy Evaluation. Energy costs are evaluated similarly by
+Computation-incurred Energy Consumption. Eq. 20 describes the
+evaluation model for computation-incurred energy cost ( 𝐸comp).
+Here, 𝐸comp, unit is the unit energy consumption for each opera-
+Data Traffic-incurred Energy Consumption. For the tiled architec-
+ture, the energy consumption due to data traffic has two sources:
+the evaluation of the total energy cost incurred by transferring data
+at the tile level. Here,𝐸NoC, unit and 𝐸DRAM, unit are the unit energy
+5.5 Overall Exploration & Optimization Process
+scheme, will be integrated into the search process.
+
+===== Page 11 =====
+possible 𝐵𝑆sub, the corresponding ScT is built with the constraints
+described by Eq. 1 - 6. Since all constraints are linear, we can ap-
+an MILP solver to find the corresponding 𝑠𝑖’s that minimize the
+computation-related EDP, a bilinear term that can be linearized via
+where 𝑝 and 𝑞 are hyper-parameters setting the importance of
+latency and energy, respectively. With the above-identified 𝑠𝑖’s, we
+can specify ScT’s and further calculate the corresponding mini-
+mized EDP cost for each 𝐵sub candidate. After preserving 𝐾1 pos-
+them and the corresponding 𝑠𝑖’s to build𝐾1 MeT’s. Again, an MILP
+solver is applied to minimize the data traffic-related EDP cost:
+{MeT𝐷
+𝑖,𝑗 , MeT𝑆
+𝑖,𝑗 ,MeT𝑆
+candidates to update total latency and energy consumption after
+considering the optimization within each hardware tile as follows:
+tion for processing sub-block 𝐵 𝑗 in State-𝑖. 𝛽𝑖,𝑗 and 𝛾𝑖,𝑗 are the
+corresponding data traffic-related latency and energy consumption
+of Core Scheduling Factors ). The ScT and MeT table formats,
+together with sub-batch size selection (𝐵𝑆sub), provide a unified and
+tables explicitly record execution states and memory status, which
+tive Scheduling via MILP ). The table-based formulation using
+ScT and MeT naturally leads to an MILP, which encodes scheduling
+constraints with high structural regularity. This enables exhaustive
+exploration of the scheduling space using off-the-shelf MILP solvers,
+offering both fast convergence and globally optimal solutions for
+6 Hierarchical Structure Optimization
+hierarchical block structure. This involves refining the arrangement
+Step-1: Graph Partition. In this step, the DNN model is parti-
+flexible sub-batch size optimization. Following these principles,
+Step-2: Gradual Partition. This step optimizes overall schedul-
+blocks. Initially, the workload of each partitioned block is set as the
+account for impact of potential optimization in lower-level blocks.
+The optimization process begins with top-level block, for example,
+ule optimization for Block-D, the newly obtained optimal cost is
+after optimizing the top-level block. These updated parameters are
+then used in the schedule optimization for the lower-level block.
+As shown in Fig. 8, cost-driven block partitioning process is
+used to identify optimal block structure for each lower-level block.
+they form a hierarchical nested block. After optimizing for both
+cases, block structure with lower cost is selected as optimal struc-
+ture for these layers. This gradual partitioning is performed for all
+hierarchical nested block structures until reaching bottom level.
+Iterative Update. Once the optimization of lower-level blocks
+convergence condition for the top-level block is met.
+
+===== Page 12 =====
+Schedule Optimization of Block-D
+Step-1Graph Partition
+23B2ESchedule Optimization of Block-EFSchedule Optimization of Block-F2GH3BSchedule Optimization of Block B
+State
+Step-2Gradual PartitionTiles
+StateScheduling of Nested Blocks
+Figure 8: Exploration and optimization process using nested block-based representation. The schedule optimization module refers to Fig. 7.
+disable Crane’s exploration and optimization for recomputation
+equipped with 𝑃 = 1024 int8 MACs and a 1 MB SRAM. The energy
+𝐵𝑊𝑁 𝑜𝐶 = 24 GB/s, and the unit energy consumption for each hop
+energy consumption is 𝐸𝐷𝑅𝐴𝑀,𝑢𝑛𝑖𝑡 = 7.5 pJ/bit. DRAM capacity
+energy consumption for various register, buffer and SRAM sizes
+Memory Compiler [ 1]. To explore the search space, we set the
+hyperparameter in our framework as 𝐾1 = ⌈0.5 × 𝑁𝐶𝑎𝑛𝑑𝑖𝑑𝑎𝑡𝑒 ⌉,
+amount of the𝐵𝑆𝑢𝑏 . 𝜃 is configured as2%×𝐶𝑜𝑠𝑡 𝑃𝑟𝑒𝑣 . The parameters
+the latency and energy performance achieved by the optimal sched-
+reduces latency by 1.70× – 3.30×, cuts energy consumption by
+0.84× – 1.49×, and lowers EDP by 1.87× – 4.20×. In comparison to
+SET, Crane achieves latency reductions of1.12× – 3.02× (averaging
+1.64×), decreases energy consumption by 1.01× – 1.38× (averaging
+1.21×), and reduces EDP by 1.13× – 4.17× (averaging 1.84×).
+for ResNet-50, it achieves 28% lower latency, 39% lower energy
+consumption, and a 56% reduction in EDP. For BERT-Base, the
+method specialized for DNN training. MBS employs batch-splitting
+for recomputation, we estimate the potential performance of a
+scheduling optimization from inference-only scheduling separately
+obtained by summing the resulting latency and energy metrics.
+is set to 100 GB/s, with energy consumption of 𝐸𝑁 𝑜𝐶,𝑢𝑛𝑖𝑡 = 0.7
+proposed in MBS. The search hyper-parameters are configured
+other parameters adhere to the configurations in Section 7.2. For
+
+===== Page 13 =====
+TangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneNormalized Latency
+Normalzied Energy Consumption
+Figure 9: Performance of inter-layer schedulers for inference workloads. Compared with Tangram, Crane reduces energy-delay product (EDP)
+LatencyEnergyEDPLatencyEnergyEDPResNet50Bert-Base
+in latency, energy and EDP, respectively, on ResNet50. On Bert-Base,
+Crane delivers 13%, 17%, and 28% reductions in the same metrics.
+Normalized Reduction (Times)LatencyEnergy ConsumptionDRAM Traffic
+LatencyEnergy ConsumptionDRAM Traffic
+data traffic and 3.62× – 5.36× lower EDP. (b) Compared to training-
+oriented SET, Crane reduces DRAM traffic by 2.76×–2.97× and EDP
+latency, energy consumption, DRAM data traffic, and total EDP cost
+size for training is 128. As shown in Fig. 11, Crane reduces latency by
+5.16×–6.96×, energy consumption by2.15×–3.04×, and DRAM traf-
+fic by 2.76×–2.97× over SET, achieving 11.01×–21.01× lower EDP.
+Normalized PerformanceSub-batch Size
+EnergyLatencyEDP
+Figure 12: Energy, latency, and EDP of ResNet-50 training under
+varying sub-batch sizes, with a fixed total batch size of 32. A sub-
+Without RecomputationWith Recomputation
+Figure 13: With recomputation enabled, Crane largely reduces
+Compared to Tangram, Crane reduces latency by 7.86×–10.26×,
+energy by 5.69×–6.41×, and DRAM traffic by 4.81×–5.72×, leading
+to 45.43×–64.73× EDP savings. Notably, the hypothetical training-
+DRAM capacity, while their searched schedule lacks the ability
+to explore recomputation opportunities that could reduce mem-
+batch splitting (i.e., a sub-batch size of 32) results in higher energy,
+latency, and EDP compared to configurations with smaller sub-
+batches, demonstrating the effectiveness of batch-level partitioning.
+and data movement overhead. Smaller sub-batches improve on-
+computation overhead. Crane’s search process can systematically
+explore this trade-off to identify an optimal sub-batch configuration.
+
+===== Page 14 =====
+PipelineSequentialFlexible SchemePipelineSequentialFlexible SchemeResNet50Transformer-large
+NormalizedPerformance
+LatencyEnergy ConsumptionEDP
+tifies better scheduling solution with reduced latency, energy and
+EDP. Model inference on cloud architecture with batch size 64.
+Impact of Recomputation (R). Fig. 13 shows that enabling
+recomputation in Crane reduces DRAM capacity requirements by
+overhead. This demonstrates the value of integrating recomputation
+enabled, Crane achieves average reductions of 2.6× in latency, 1.8×
+in energy, and 4.7× in EDP compared to the case turning off ex-
+ecution scheme search. These gains stem from mitigating data
+reloading overheads in sequential scheduling and reducing pipeline
+bubbles in fully pipelined execution.
+Finer-Grained Sub-batch Optimization Analysis. We use
+restricts the search space to coarse-grained sub-batch scheduling,
+This substantial gain—despite Crane’s larger search space—is en-
+mization is formulated as an MILP problem solvable by efficient
+solvers; (2) The hierarchical search space is effectively pruned by
+(a) restricting sub-batch exploration to Top-𝐾1, 𝐾2 candidates based
+terministic, hierarchical refinement process—alternating between
+Figure 16: Runtime and EDP cost analysis of 𝜃 and 𝐾2. Increasing 𝜃
+Sensitivity Analysis. The parameters 𝐾1–𝐾4 and 𝜃 affect run-
+leveraging a hierarchical table-format representation, Crane cap-
+forms scheduling into a structured optimization problem. Experi-
+beta/search?term=artisan
+Yida Wang. 2024. Slapo: A Schedule Language for Progressive Optimization of
+Auto-NBA: Efficient and Effective Search over the Joint Space of Networks,
+
+===== Page 15 =====
+Accelerator Mapping Space Search. In Proceedings of the 26th ACM International
+Constrained Optimization for Spatial Accelerators. In2021 ACM/IEEE 48th Annual
+Chen. 2019. GPipe: Efficient Training of Giant Neural Networks using Pipeline
+Wall with Optimal Tensor Rematerialization. Proceedings of Machine Learning
+Energy-Efficient DRAM for Extreme Bandwidth Systems. In Proceedings of the
+celerator Design Space Exploration via Bayesian Optimization. In2017 IEEE/ACM
+Sparse: Differentiable Modeling and Optimization of Sparse CNN Dataflow and
+Deep Learning Toolkit-Accelerated Analytical Modeling and Optimization of
+[34] Linghao Song, Xuehai Qian, Hai Li, and Yiran Chen. 2017. PipeLayer: A Pipelined
+for Latency Throughput Tradeoff in Transformer Acceleration. In Proceedings
+

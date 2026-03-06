@@ -1,0 +1,25 @@
+# resnet50_test.py (20260306_195536)
+Best sub-batch = 16
+MILP backend   = ortools-scip
+State order    = W0 -> W1 -> W2 -> M -> D0 -> D1 -> D2
+State batches  = [0, 1, 1, 1, 1, 0, 0]
+Latency        = 39062500000.0000
+Energy         = 426.7200
+EDP            = 16668750000000.0020
+State details:
+  idx=0  name=W0  cat=warmup active_pe=1  assigned_sub_batches=0
+  idx=1  name=W1  cat=warmup active_pe=2  assigned_sub_batches=1
+  idx=2  name=W2  cat=warmup active_pe=3  assigned_sub_batches=1
+  idx=3  name=M   cat=steady active_pe=4  assigned_sub_batches=1
+  idx=4  name=D0  cat=drain  active_pe=3  assigned_sub_batches=1
+  idx=5  name=D1  cat=drain  active_pe=2  assigned_sub_batches=0
+  idx=6  name=D2  cat=drain  active_pe=1  assigned_sub_batches=0
+
+ScT (rows=state, cols=block):
+[[0. 0. 0.]
+ [0. 0. 0.]
+ [1. 1. 1.]
+ [1. 2. 1.]
+ [2. 2. 2.]
+ [3. 3. 2.]
+ [4. 4. 4.]]

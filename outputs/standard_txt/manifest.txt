@@ -1,0 +1,11 @@
+Standardized text export (UTF-8, LF, no NUL)
+Source root: outputs/
+Destination root: outputs/standard_txt/
+
+relative_path	original_bytes	standardized_bytes	standardized_nul_count
+notes\crane_run_and_paper_summary_20260306_195852.md	3642	3638	0
+notes\paper_full_text.txt	100904	151353	0
+notes\paper_keyword_excerpt.txt	90771	136155	0
+notes\paper_method_snippets.txt	34805	34228	0
+runs\advanced_20260306_195536.txt	4400	2171	0
+runs\resnet50_20260306_195536.txt	1743	864	0
