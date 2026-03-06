@@ -33,14 +33,30 @@ def build_resnet50_style_blocks() -> list[Block]:
     return [block_a, block_b, block_c]
 
 
+def print_state_view(result) -> None:
+    print("State details:")
+    for i, (name, cat, pe, batch) in enumerate(
+        zip(
+            result.state_order,
+            result.state_categories,
+            result.active_pes,
+            result.milp_solution.state_batches,
+        )
+    ):
+        print(f"  idx={i:<2d} name={name:<3s} cat={cat:<6s} active_pe={pe:<2d} assigned_sub_batches={batch}")
+
+
 def main() -> None:
     blocks = build_resnet50_style_blocks()
     config = SearchConfig(
         batch_size=64,
         candidate_sub_batches=[2, 4, 8, 16],
-        num_states=5,
+        num_pes=4,
         sram_capacity=5000.0,
         dram_capacity=10000.0,
+        min_active_states=4,
+        min_batch_if_active=1,
+        max_state_share=0.5,
     )
 
     result = search_schedule(blocks, config)
@@ -52,6 +68,8 @@ def main() -> None:
     print(f"Latency        = {result.total_latency:.4f}")
     print(f"Energy         = {result.total_energy:.4f}")
     print(f"EDP            = {result.total_edp:.4f}")
+
+    print_state_view(result)
 
     print("\nScT (rows=state, cols=block):")
     print(result.sct.table)
