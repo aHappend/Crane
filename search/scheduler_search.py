@@ -9,7 +9,7 @@ from cost_model.latency_model import noc_latency
 from scheduler.block import Block, derive_block_dependencies, merge_linear_blocks
 from scheduler.memory_table import MemoryOptimizationResult, MemoryTable, optimize_memory_table
 from scheduler.milp_solver import MilpSolution
-from scheduler.paper_milp import optimize_sct_table
+from scheduler.paper_milp import ScTOptimizationResult, optimize_sct_table
 from scheduler.scheduling_table import SchedulingTable
 
 
@@ -33,6 +33,14 @@ class SearchConfig:
     min_active_states: int = 1
     min_batch_if_active: int = 1
     max_state_share: float = 1.0
+
+    # Paper-like search flow.
+    strict_paper_mode: bool = True
+    top_k1: int = 4
+    top_k2: int = 2
+    use_edp_objective: bool = True
+    dependency_gap: int = 0
+    allow_solver_fallback: bool = False
 
 
 @dataclass
@@ -58,6 +66,20 @@ class SearchResult:
     total_latency: float
     total_energy: float
     total_edp: float
+
+
+@dataclass
+class _Candidate:
+    sub_batch: int
+    total_sub_batches: int
+    sct_opt: ScTOptimizationResult
+    compute_latency: float
+    compute_energy: float
+    compute_edp: float
+    met_opt: MemoryOptimizationResult | None = None
+    memory_latency: float = 0.0
+    memory_energy: float = 0.0
+    memory_edp: float = 0.0
 
 
 def _active_blocks_for_state(state: int, num_blocks: int) -> list[int]:
@@ -139,6 +161,8 @@ def _caps_cover_pipeline_windows(
         if window_sum < total_sub_batches:
             return False
     return True
+
+
 def _estimate_memory_cost(
     sct: SchedulingTable,
     met: MemoryTable,
@@ -180,6 +204,52 @@ def _prepare_blocks_and_dependencies(
     return merged_blocks, merged_deps
 
 
+def _build_result_from_candidate(
+    candidate: _Candidate,
+    block_names: list[str],
+    block_deps: list[tuple[int, int]],
+    state_order: list[str],
+    categories: list[str],
+    active_pes: list[int],
+    state_active_blocks: list[list[int]],
+) -> SearchResult:
+    assert candidate.met_opt is not None
+
+    total_latency = candidate.compute_latency + candidate.memory_latency
+    total_energy = candidate.compute_energy + candidate.memory_energy
+    total_edp = edp(total_latency, total_energy)
+
+    return SearchResult(
+        best_sub_batch=candidate.sub_batch,
+        state_order=state_order,
+        state_categories=categories,
+        active_pes=active_pes,
+        state_active_blocks=state_active_blocks,
+        scheduled_blocks=block_names,
+        block_dependencies=block_deps,
+        state_unit_latency=candidate.sct_opt.state_latency_coeff,
+        state_unit_energy=candidate.sct_opt.state_energy_coeff,
+        sct=candidate.sct_opt.sct,
+        met=candidate.met_opt.table,
+        milp_solution=MilpSolution(
+            state_batches=list(candidate.sct_opt.state_workloads),
+            latency=candidate.compute_latency,
+            energy=candidate.compute_energy,
+            objective=candidate.sct_opt.objective,
+            solver_name=candidate.sct_opt.solver_name,
+        ),
+        sct_solver_name=candidate.sct_opt.solver_name,
+        met_solver_name=candidate.met_opt.solver_name,
+        compute_latency=candidate.compute_latency,
+        compute_energy=candidate.compute_energy,
+        memory_latency=candidate.memory_latency,
+        memory_energy=candidate.memory_energy,
+        total_latency=total_latency,
+        total_energy=total_energy,
+        total_edp=total_edp,
+    )
+
+
 def search_schedule(
     blocks: Sequence[Block],
     config: SearchConfig,
@@ -202,47 +272,41 @@ def search_schedule(
         num_states=config.num_states,
     )
 
-    best: SearchResult | None = None
+    stage1_candidates: list[_Candidate] = []
 
+    # Stage-1: enumerate BS_sub and optimize ScT (Eq.1-6, Eq.22).
     for sub_batch in config.candidate_sub_batches:
         if sub_batch <= 0 or config.batch_size % sub_batch != 0:
             continue
 
         total_sub_batches = config.batch_size // sub_batch
 
-        min_active = max(1, min(config.min_active_states, total_sub_batches, n_states))
-        if min_active * config.min_batch_if_active > total_sub_batches:
-            continue
+        min_active = max(1, min(int(config.min_active_states), n_states))
 
         caps = _state_caps(total_sub_batches, n_states, config.max_state_share)
         if caps is not None:
-            if sum(caps) < total_sub_batches:
-                continue
             if not _caps_cover_pipeline_windows(caps, total_sub_batches, len(work_blocks), n_states):
                 caps = None
 
-        sct_opt = optimize_sct_table(
-            block_flops=block_flops,
-            block_outputs=block_outputs,
-            total_sub_batches=total_sub_batches,
-            block_dependencies=block_deps,
-            num_pes=config.num_pes,
-            weight_latency=config.weight_latency,
-            weight_energy=config.weight_energy,
-            num_states=n_states,
-            min_active_states=min_active,
-            min_batch_if_active=config.min_batch_if_active,
-            max_batches_per_state=caps,
-        )
-
-        met_opt: MemoryOptimizationResult = optimize_memory_table(
-            sct=sct_opt.sct,
-            block_volumes=block_outputs,
-            block_dependencies=block_deps,
-            sram_capacity=config.sram_capacity,
-            dram_capacity=config.dram_capacity,
-            heuristic_sram_keep_ratio=0.6,
-        )
+        try:
+            sct_opt = optimize_sct_table(
+                block_flops=block_flops,
+                block_outputs=block_outputs,
+                total_sub_batches=total_sub_batches,
+                block_dependencies=block_deps,
+                num_pes=config.num_pes,
+                weight_latency=config.weight_latency,
+                weight_energy=config.weight_energy,
+                num_states=n_states,
+                min_active_states=min_active,
+                min_batch_if_active=config.min_batch_if_active,
+                max_batches_per_state=caps,
+                use_edp_objective=config.use_edp_objective,
+                dependency_gap=config.dependency_gap,
+                allow_fallback=config.allow_solver_fallback,
+            )
+        except Exception:
+            continue
 
         compute_latency = sum(
             sct_opt.state_workloads[i] * sct_opt.state_latency_coeff[i]
@@ -253,56 +317,80 @@ def search_schedule(
             for i in range(len(sct_opt.state_workloads))
         )
 
+        stage1_candidates.append(
+            _Candidate(
+                sub_batch=sub_batch,
+                total_sub_batches=total_sub_batches,
+                sct_opt=sct_opt,
+                compute_latency=compute_latency,
+                compute_energy=compute_energy,
+                compute_edp=edp(compute_latency, compute_energy),
+            )
+        )
+
+    if not stage1_candidates:
+        raise RuntimeError("No feasible ScT candidate found. Check batch and constraints.")
+
+    stage1_candidates.sort(key=lambda x: x.sct_opt.objective)
+    if config.strict_paper_mode:
+        k1 = max(1, min(int(config.top_k1), len(stage1_candidates)))
+        stage1_candidates = stage1_candidates[:k1]
+
+    # Stage-2: optimize MeT (Eq.7-12, Eq.23) on top-K1.
+    stage2_candidates: list[_Candidate] = []
+    for cand in stage1_candidates:
+        try:
+            met_opt = optimize_memory_table(
+                sct=cand.sct_opt.sct,
+                block_volumes=block_outputs,
+                block_dependencies=block_deps,
+                sram_capacity=config.sram_capacity,
+                dram_capacity=config.dram_capacity,
+                heuristic_sram_keep_ratio=0.6,
+                noc_bandwidth=config.noc_bandwidth,
+                dram_energy_per_unit=config.dram_energy_per_unit,
+                weight_latency=config.weight_latency,
+                weight_energy=config.weight_energy,
+                use_edp_objective=config.use_edp_objective,
+                allow_fallback=config.allow_solver_fallback,
+            )
+        except Exception:
+            continue
+
         memory_latency, memory_energy = _estimate_memory_cost(
-            sct=sct_opt.sct,
+            sct=cand.sct_opt.sct,
             met=met_opt.table,
             block_volumes=block_outputs,
             noc_bandwidth=config.noc_bandwidth,
             dram_energy_per_unit=config.dram_energy_per_unit,
         )
 
-        total_latency = compute_latency + memory_latency
-        total_energy = compute_energy + memory_energy
-        total_edp = edp(total_latency, total_energy)
+        cand.met_opt = met_opt
+        cand.memory_latency = memory_latency
+        cand.memory_energy = memory_energy
+        cand.memory_edp = edp(memory_latency, memory_energy)
+        stage2_candidates.append(cand)
 
-        result = SearchResult(
-            best_sub_batch=sub_batch,
-            state_order=state_order,
-            state_categories=categories,
-            active_pes=active_pes,
-            state_active_blocks=state_active_blocks,
-            scheduled_blocks=block_names,
-            block_dependencies=block_deps,
-            state_unit_latency=sct_opt.state_latency_coeff,
-            state_unit_energy=sct_opt.state_energy_coeff,
-            sct=sct_opt.sct,
-            met=met_opt.table,
-            milp_solution=MilpSolution(
-                state_batches=list(sct_opt.state_workloads),
-                latency=compute_latency,
-                energy=compute_energy,
-                objective=sct_opt.objective,
-                solver_name=sct_opt.solver_name,
-            ),
-            sct_solver_name=sct_opt.solver_name,
-            met_solver_name=met_opt.solver_name,
-            compute_latency=compute_latency,
-            compute_energy=compute_energy,
-            memory_latency=memory_latency,
-            memory_energy=memory_energy,
-            total_latency=total_latency,
-            total_energy=total_energy,
-            total_edp=total_edp,
-        )
+    if not stage2_candidates:
+        raise RuntimeError("No feasible MeT candidate found after ScT optimization.")
 
-        if best is None or result.total_edp < best.total_edp:
-            best = result
+    stage2_candidates.sort(key=lambda x: x.met_opt.objective if x.met_opt is not None else float("inf"))
+    if config.strict_paper_mode:
+        k2 = max(1, min(int(config.top_k2), len(stage2_candidates)))
+        stage2_candidates = stage2_candidates[:k2]
 
-    if best is None:
-        raise RuntimeError("No feasible schedule found. Check batch and capacity constraints.")
+    # Final choose by total EDP.
+    best_cand = min(
+        stage2_candidates,
+        key=lambda x: edp(x.compute_latency + x.memory_latency, x.compute_energy + x.memory_energy),
+    )
 
-    return best
-
-
-
-
+    return _build_result_from_candidate(
+        candidate=best_cand,
+        block_names=block_names,
+        block_deps=block_deps,
+        state_order=state_order,
+        categories=categories,
+        active_pes=active_pes,
+        state_active_blocks=state_active_blocks,
+    )

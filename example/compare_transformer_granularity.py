@@ -59,6 +59,7 @@ def build_stage_blocks_from_min_layers(min_layer_blocks: Sequence[Block], num_st
 
 
 def _cfg() -> SearchConfig:
+    # Keep constraints identical for stage/layer and avoid extra heuristic caps.
     return SearchConfig(
         batch_size=128,
         candidate_sub_batches=[4, 8, 16, 32],
@@ -68,9 +69,15 @@ def _cfg() -> SearchConfig:
         enable_chain_block_merge=True,
         max_layers_per_block=16,
         min_layers_per_block=2,
-        min_active_states=6,
+        min_active_states=1,
         min_batch_if_active=1,
-        max_state_share=0.40,
+        max_state_share=1.0,
+        strict_paper_mode=True,
+        top_k1=4,
+        top_k2=2,
+        use_edp_objective=True,
+        dependency_gap=0,
+        allow_solver_fallback=False,
     )
 
 
@@ -211,17 +218,23 @@ def main() -> None:
         f.write("experiment=transformer_granularity_compare_same_constraints\n")
         f.write("source_ref=src/nns/transformer.cpp\n")
         f.write("same_constraints=True\n")
-        f.write("config.batch_size=128\n")
-        f.write("config.candidate_sub_batches=[4,8,16,32]\n")
-        f.write("config.sram_capacity=15000.0\n")
-        f.write("config.dram_capacity=30000.0\n")
-        f.write("config.num_pes=4\n")
-        f.write("config.enable_chain_block_merge=True\n")
-        f.write("config.max_layers_per_block=16\n")
-        f.write("config.min_layers_per_block=2\n")
-        f.write("config.min_active_states=6\n")
-        f.write("config.min_batch_if_active=1\n")
-        f.write("config.max_state_share=0.40\n")
+        f.write(f"config.batch_size={stage_cfg.batch_size}\n")
+        f.write(f"config.candidate_sub_batches={list(stage_cfg.candidate_sub_batches)}\n")
+        f.write(f"config.sram_capacity={stage_cfg.sram_capacity}\n")
+        f.write(f"config.dram_capacity={stage_cfg.dram_capacity}\n")
+        f.write(f"config.num_pes={stage_cfg.num_pes}\n")
+        f.write(f"config.enable_chain_block_merge={stage_cfg.enable_chain_block_merge}\n")
+        f.write(f"config.max_layers_per_block={stage_cfg.max_layers_per_block}\n")
+        f.write(f"config.min_layers_per_block={stage_cfg.min_layers_per_block}\n")
+        f.write(f"config.min_active_states={stage_cfg.min_active_states}\n")
+        f.write(f"config.min_batch_if_active={stage_cfg.min_batch_if_active}\n")
+        f.write(f"config.max_state_share={stage_cfg.max_state_share}\n")
+        f.write(f"config.strict_paper_mode={stage_cfg.strict_paper_mode}\n")
+        f.write(f"config.top_k1={stage_cfg.top_k1}\n")
+        f.write(f"config.top_k2={stage_cfg.top_k2}\n")
+        f.write(f"config.use_edp_objective={stage_cfg.use_edp_objective}\n")
+        f.write(f"config.dependency_gap={stage_cfg.dependency_gap}\n")
+        f.write(f"config.allow_solver_fallback={stage_cfg.allow_solver_fallback}\n")
         f.write(f"raw_layer_count={len(min_layer_blocks)}\n")
         f.write(f"stage_input_blocks={len(stage_blocks)}\n")
         f.write(f"layer_input_blocks={len(min_layer_blocks)}\n")
