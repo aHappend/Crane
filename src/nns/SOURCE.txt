@@ -1,0 +1,21 @@
+﻿Source: https://github.com/SET-Scheduling-Project/SET-ISCA2023/tree/main/src/nns
+Upstream HEAD: a7bd73912f58d9fea10fadab693eebd4e6e3054d
+Synced on: 2026-03-06
+
+Copied files (official):
+- alexnet.cpp
+- darknet19.cpp
+- densenet.cpp
+- gnmt.cpp
+- googlenet.cpp
+- incep_resnet.cpp
+- llm.cpp
+- pnasnet.cpp
+- resnet.cpp
+- transformer.cpp
+- vgg.cpp
+- zfnet.cpp
+
+Note:
+The upstream src/nns directory currently contains 12 .cpp files.
+Files like attention_group_builder.cpp or transformer_fused.cpp are not present in that upstream path.
