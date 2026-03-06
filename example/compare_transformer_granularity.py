@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import argparse
 import csv
 from dataclasses import dataclass
 from datetime import datetime
@@ -58,14 +59,14 @@ def build_stage_blocks_from_min_layers(min_layer_blocks: Sequence[Block], num_st
     return blocks
 
 
-def _cfg() -> SearchConfig:
+def _cfg(num_pes: int) -> SearchConfig:
     # Keep constraints identical for stage/layer and avoid extra heuristic caps.
     return SearchConfig(
         batch_size=128,
         candidate_sub_batches=[4, 8, 16, 32],
         sram_capacity=15000.0,
         dram_capacity=30000.0,
-        num_pes=4,
+        num_pes=num_pes,
         enable_chain_block_merge=True,
         max_layers_per_block=16,
         min_layers_per_block=2,
@@ -148,11 +149,18 @@ def _write_detail(path: Path, case: CaseResult) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Compare transformer stage vs layer granularity under same constraints")
+    parser.add_argument("--num-pes", type=int, default=4)
+    args = parser.parse_args()
+
+    if args.num_pes <= 0:
+        raise ValueError("--num-pes must be > 0")
+
     min_layer_blocks = build_transformer_min_layers()
     stage_blocks = build_stage_blocks_from_min_layers(min_layer_blocks, num_stages=8)
 
-    stage_cfg = _cfg()
-    layer_cfg = _cfg()
+    stage_cfg = _cfg(args.num_pes)
+    layer_cfg = _cfg(args.num_pes)
 
     stage_result = search_schedule(stage_blocks, stage_cfg)
     layer_result = search_schedule(min_layer_blocks, layer_cfg)
@@ -163,7 +171,7 @@ def main() -> None:
     ]
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = ROOT / "outputs" / "experiments" / f"transformer_granularity_compare_{ts}"
+    out_dir = ROOT / "outputs" / "experiments" / f"transformer_granularity_compare_pe{args.num_pes}_{ts}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     summary_txt = out_dir / "summary.txt"

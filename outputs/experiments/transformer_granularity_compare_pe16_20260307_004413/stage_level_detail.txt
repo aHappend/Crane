@@ -1,0 +1,101 @@
+network=transformer_official_same_source
+source_ref=src/nns/transformer.cpp
+mode=stage_level
+input_blocks=8
+scheduled_blocks=8
+num_states=15
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+compute_latency=328967940668.654846
+compute_energy=5.252792
+memory_latency=0.000000
+memory_energy=0.000000
+latency=328967940668.654846
+energy=5.252792
+edp=1728000086515.465332
+
+states
+  idx=0 name=S0 category=warmup active_pe=1 assigned_sub_batches=0 active_blocks=[0]
+  idx=1 name=S1 category=warmup active_pe=2 assigned_sub_batches=0 active_blocks=[0, 1]
+  idx=2 name=S2 category=warmup active_pe=3 assigned_sub_batches=0 active_blocks=[0, 1, 2]
+  idx=3 name=S3 category=warmup active_pe=4 assigned_sub_batches=0 active_blocks=[0, 1, 2, 3]
+  idx=4 name=S4 category=warmup active_pe=5 assigned_sub_batches=0 active_blocks=[0, 1, 2, 3, 4]
+  idx=5 name=S5 category=warmup active_pe=6 assigned_sub_batches=0 active_blocks=[0, 1, 2, 3, 4, 5]
+  idx=6 name=S6 category=warmup active_pe=7 assigned_sub_batches=0 active_blocks=[0, 1, 2, 3, 4, 5, 6]
+  idx=7 name=S7 category=steady active_pe=8 assigned_sub_batches=4 active_blocks=[0, 1, 2, 3, 4, 5, 6, 7]
+  idx=8 name=S8 category=drain active_pe=7 assigned_sub_batches=0 active_blocks=[1, 2, 3, 4, 5, 6, 7]
+  idx=9 name=S9 category=drain active_pe=6 assigned_sub_batches=0 active_blocks=[2, 3, 4, 5, 6, 7]
+  idx=10 name=S10 category=drain active_pe=5 assigned_sub_batches=0 active_blocks=[3, 4, 5, 6, 7]
+  idx=11 name=S11 category=drain active_pe=4 assigned_sub_batches=0 active_blocks=[4, 5, 6, 7]
+  idx=12 name=S12 category=drain active_pe=3 assigned_sub_batches=0 active_blocks=[5, 6, 7]
+  idx=13 name=S13 category=drain active_pe=2 assigned_sub_batches=0 active_blocks=[6, 7]
+  idx=14 name=S14 category=drain active_pe=1 assigned_sub_batches=0 active_blocks=[7]
+
+ScT_cumulative(rows=state, cols=block)
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+
+ScT_delta_per_state(rows=state, cols=block)
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+4,4,4,4,4,4,4,4
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+
+MeT_S(rows=state, cols=block)
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+
+MeT_D(rows=state, cols=block)
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
+4,4,4,4,4,4,4,4
