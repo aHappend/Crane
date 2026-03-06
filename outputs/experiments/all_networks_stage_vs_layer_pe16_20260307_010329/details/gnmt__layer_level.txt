@@ -1,0 +1,15 @@
+network=gnmt
+mode=layer_level
+source_ref=src/nns/gnmt.cpp
+batch_size=128
+num_pes=16
+input_blocks=8
+scheduled_blocks=8
+num_states=15
+best_sub_batch=16
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=15323462414.578590
+energy=0.235034
+edp=3601533112.421846
+state_batches=0,0,0,0,0,0,0,8,0,0,0,0,0,0,0

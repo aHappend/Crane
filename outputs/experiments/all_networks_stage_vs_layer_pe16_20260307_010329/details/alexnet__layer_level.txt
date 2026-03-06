@@ -1,0 +1,15 @@
+network=alexnet
+mode=layer_level
+source_ref=src/nns/alexnet.cpp
+batch_size=64
+num_pes=16
+input_blocks=9
+scheduled_blocks=9
+num_states=17
+best_sub_batch=16
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=2400553213.909379
+energy=0.036548
+edp=87736503.622202
+state_batches=0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0

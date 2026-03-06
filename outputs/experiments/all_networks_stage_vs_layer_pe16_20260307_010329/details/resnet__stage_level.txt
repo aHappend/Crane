@@ -1,0 +1,15 @@
+network=resnet
+mode=stage_level
+source_ref=src/nns/resnet.cpp
+batch_size=64
+num_pes=16
+input_blocks=4
+scheduled_blocks=4
+num_states=7
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=8636794939.471716
+energy=3.013500
+edp=26026980431.600163
+state_batches=0,0,0,2,0,0,0

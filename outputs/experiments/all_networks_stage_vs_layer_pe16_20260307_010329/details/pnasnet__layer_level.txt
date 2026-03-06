@@ -1,0 +1,15 @@
+network=pnasnet
+mode=layer_level
+source_ref=src/nns/pnasnet.cpp
+batch_size=64
+num_pes=16
+input_blocks=8
+scheduled_blocks=8
+num_states=15
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=2807752110.173256
+energy=0.043034
+edp=120829361.716387
+state_batches=0,0,0,0,0,0,0,2,0,0,0,0,0,0,0

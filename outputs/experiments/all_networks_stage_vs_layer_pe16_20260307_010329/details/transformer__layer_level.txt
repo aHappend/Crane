@@ -1,0 +1,15 @@
+network=transformer
+mode=layer_level
+source_ref=src/nns/transformer.cpp
+batch_size=128
+num_pes=16
+input_blocks=8
+scheduled_blocks=8
+num_states=15
+best_sub_batch=16
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=23788242599.875805
+energy=0.368340
+edp=8762159551.371923
+state_batches=0,0,0,0,0,0,0,8,0,0,0,0,0,0,0
