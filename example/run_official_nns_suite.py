@@ -13,7 +13,8 @@ from search.scheduler_search import SearchConfig, search_schedule
 
 
 def official_specs():
-    # Proxy layer metadata derived from official src/nns network families.
+    # Proxy metadata aligned to official src/nns network families.
+    # These are architecture-level workload descriptors (not trained weights).
     return {
         "alexnet": {
             "source_ref": "src/nns/alexnet.cpp",
@@ -164,6 +165,20 @@ def fmt_matrix(rows):
     return "\n".join(",".join(f"{v:.0f}" for v in r) for r in rows)
 
 
+def _delta_from_cumulative(cum_rows):
+    delta = []
+    for i in range(len(cum_rows)):
+        if i == 0:
+            delta.append(cum_rows[i].copy())
+        else:
+            delta.append(cum_rows[i] - cum_rows[i - 1])
+    return delta
+
+
+def _block_layers_from_name(block_name):
+    return [x for x in block_name.split("|") if x]
+
+
 def run_one(name, spec):
     blocks = build_layer_blocks(spec["layers"])
     cfg = SearchConfig(
@@ -172,31 +187,52 @@ def run_one(name, spec):
         sram_capacity=15000.0,
         dram_capacity=30000.0,
         num_pes=4,
+        enable_chain_block_merge=True,
+        max_layers_per_block=3,
+        min_layers_per_block=2,
         min_active_states=4,
         min_batch_if_active=1,
         max_state_share=0.45,
     )
     result = search_schedule(blocks, cfg)
+
     sct = result.sct.table
+    met_s = result.met.sram
+    met_d = result.met.dram
+    delta = _delta_from_cumulative(sct)
 
-    # delta[state, layer] = processed amount in this state only
-    delta = []
-    for i in range(sct.shape[0]):
-        if i == 0:
-            delta.append(sct[i].copy())
-        else:
-            delta.append(sct[i] - sct[i - 1])
-
-    layer_state_map = []
-    layer_names = [b.name for b in blocks]
-    for j, lname in enumerate(layer_names):
+    block_names = list(result.scheduled_blocks)
+    block_to_state_map = []
+    for j, bname in enumerate(block_names):
         pairs = []
         for i, d in enumerate(delta):
             if d[j] > 0:
                 pairs.append(f"{result.state_order[i]}:+{int(d[j])}")
-        layer_state_map.append((lname, " ".join(pairs) if pairs else "none"))
+        block_to_state_map.append((bname, " ".join(pairs) if pairs else "none"))
 
-    return result, sct, delta, layer_names, layer_state_map
+    layer_to_state = {}
+    for bname, mapping in block_to_state_map:
+        for lname in _block_layers_from_name(bname):
+            layer_to_state[lname] = mapping
+
+    state_lines = []
+    for i, (sname, cat, ape, sb, active_blocks) in enumerate(
+        zip(
+            result.state_order,
+            result.state_categories,
+            result.active_pes,
+            result.milp_solution.state_batches,
+            result.state_active_blocks,
+        )
+    ):
+        active_names = [block_names[idx] for idx in active_blocks if 0 <= idx < len(block_names)]
+        pe_span = f"PE0..PE{max(0, ape - 1)}"
+        state_lines.append(
+            f"  idx={i} name={sname} category={cat} active_pe={ape} pe_span={pe_span} "
+            f"active_blocks={active_names} assigned_sub_batches={sb}"
+        )
+
+    return result, sct, met_s, met_d, delta, block_names, block_to_state_map, layer_to_state, state_lines
 
 
 def main():
@@ -210,7 +246,7 @@ def main():
 
     rows = []
     for name in sorted(specs.keys()):
-        result, sct, delta, layer_names, layer_state_map = run_one(name, specs[name])
+        result, sct, met_s, met_d, delta, block_names, block_to_state_map, layer_to_state, state_lines = run_one(name, specs[name])
 
         detail = detail_dir / f"{name}.txt"
         with detail.open("w", encoding="utf-8", newline="\n") as f:
@@ -218,30 +254,50 @@ def main():
             f.write(f"source_ref={specs[name]['source_ref']}\n")
             f.write(f"batch_size={specs[name]['batch_size']}\n")
             f.write(f"best_sub_batch={result.best_sub_batch}\n")
-            f.write(f"solver={result.milp_solution.solver_name}\n")
+            f.write(f"sct_solver={result.sct_solver_name}\n")
+            f.write(f"met_solver={result.met_solver_name}\n")
+            f.write(f"compute_latency={result.compute_latency:.6f}\n")
+            f.write(f"compute_energy={result.compute_energy:.6f}\n")
+            f.write(f"memory_latency={result.memory_latency:.6f}\n")
+            f.write(f"memory_energy={result.memory_energy:.6f}\n")
             f.write(f"latency={result.total_latency:.6f}\n")
             f.write(f"energy={result.total_energy:.6f}\n")
             f.write(f"edp={result.total_edp:.6f}\n\n")
 
             f.write("states\n")
-            for i, (sname, cat, ape, sb) in enumerate(
-                zip(result.state_order, result.state_categories, result.active_pes, result.milp_solution.state_batches)
-            ):
-                f.write(f"  idx={i} name={sname} category={cat} active_pe={ape} assigned_sub_batches={sb}\n")
+            for line in state_lines:
+                f.write(line + "\n")
 
-            f.write("\nlayers\n")
-            for j, (lname, gflops, out_mb) in enumerate(specs[name]["layers"]):
-                f.write(f"  col={j} layer={lname} flops_g={gflops} out_mb={out_mb}\n")
+            f.write("\nblocks(columns in ScT/MeT)\n")
+            for j, bname in enumerate(block_names):
+                layer_list = _block_layers_from_name(bname)
+                f.write(f"  col={j} block={bname} layers={layer_list}\n")
 
-            f.write("\nScT_cumulative(rows=state, cols=layer)\n")
+            f.write("\nblock_dependencies(parent->child)\n")
+            for p, c in result.block_dependencies:
+                p_name = block_names[p] if 0 <= p < len(block_names) else str(p)
+                c_name = block_names[c] if 0 <= c < len(block_names) else str(c)
+                f.write(f"  ({p},{c}) {p_name} -> {c_name}\n")
+
+            f.write("\nScT_cumulative(rows=state, cols=block)\n")
             f.write(fmt_matrix(sct) + "\n")
 
-            f.write("\nScT_delta_per_state(rows=state, cols=layer)\n")
+            f.write("\nScT_delta_per_state(rows=state, cols=block)\n")
             f.write(fmt_matrix(delta) + "\n")
 
+            f.write("\nMeT_S(rows=state, cols=block)\n")
+            f.write(fmt_matrix(met_s) + "\n")
+
+            f.write("\nMeT_D(rows=state, cols=block)\n")
+            f.write(fmt_matrix(met_d) + "\n")
+
+            f.write("\nblock_to_state_mapping\n")
+            for bname, mapping in block_to_state_map:
+                f.write(f"  {bname}: {mapping}\n")
+
             f.write("\nlayer_to_state_mapping\n")
-            for lname, mapping in layer_state_map:
-                f.write(f"  {lname}: {mapping}\n")
+            for lname, _, _ in specs[name]["layers"]:
+                f.write(f"  {lname}: {layer_to_state.get(lname, 'none')}\n")
 
         rows.append(
             {
@@ -249,6 +305,8 @@ def main():
                 "source_ref": specs[name]["source_ref"],
                 "batch_size": specs[name]["batch_size"],
                 "best_sub_batch": result.best_sub_batch,
+                "num_blocks": len(block_names),
+                "num_states": len(result.state_order),
                 "state_order": " -> ".join(result.state_order),
                 "state_batches": ",".join(str(x) for x in result.milp_solution.state_batches),
                 "active_states": sum(1 for x in result.milp_solution.state_batches if x > 0),
@@ -263,7 +321,7 @@ def main():
     txt_file = out_dir / f"official_nns_suite_{ts}.txt"
 
     fields = [
-        "network", "source_ref", "batch_size", "best_sub_batch", "state_order",
+        "network", "source_ref", "batch_size", "best_sub_batch", "num_blocks", "num_states", "state_order",
         "state_batches", "active_states", "latency", "energy", "edp", "detail_file",
     ]
     with csv_file.open("w", encoding="utf-8", newline="\n") as f:
@@ -280,6 +338,8 @@ def main():
             f.write(f"  source_ref: {r['source_ref']}\n")
             f.write(f"  batch_size: {r['batch_size']}\n")
             f.write(f"  best_sub_batch: {r['best_sub_batch']}\n")
+            f.write(f"  num_blocks: {r['num_blocks']}\n")
+            f.write(f"  num_states: {r['num_states']}\n")
             f.write(f"  state_batches: {r['state_batches']}\n")
             f.write(f"  active_states: {r['active_states']}\n")
             f.write(f"  latency: {r['latency']}\n")
@@ -294,3 +354,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

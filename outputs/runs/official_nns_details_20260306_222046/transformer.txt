@@ -1,0 +1,72 @@
+network=transformer
+source_ref=src/nns/transformer.cpp
+batch_size=128
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+compute_latency=106352941176.470596
+compute_energy=2040.000000
+memory_latency=0.000000
+memory_energy=0.000000
+latency=106352941176.470596
+energy=2040.000000
+edp=216960000000000.031250
+
+states
+  idx=0 name=S0 category=warmup active_pe=1 pe_span=PE0..PE0 active_blocks=['embed|attn1|mlp1'] assigned_sub_batches=0
+  idx=1 name=S1 category=warmup active_pe=2 pe_span=PE0..PE1 active_blocks=['embed|attn1|mlp1', 'attn2|mlp2|attn3'] assigned_sub_batches=0
+  idx=2 name=S2 category=steady active_pe=3 pe_span=PE0..PE2 active_blocks=['embed|attn1|mlp1', 'attn2|mlp2|attn3', 'mlp3|proj'] assigned_sub_batches=4
+  idx=3 name=S3 category=drain active_pe=2 pe_span=PE0..PE1 active_blocks=['attn2|mlp2|attn3', 'mlp3|proj'] assigned_sub_batches=0
+  idx=4 name=S4 category=drain active_pe=1 pe_span=PE0..PE0 active_blocks=['mlp3|proj'] assigned_sub_batches=0
+
+blocks(columns in ScT/MeT)
+  col=0 block=embed|attn1|mlp1 layers=['embed', 'attn1', 'mlp1']
+  col=1 block=attn2|mlp2|attn3 layers=['attn2', 'mlp2', 'attn3']
+  col=2 block=mlp3|proj layers=['mlp3', 'proj']
+
+block_dependencies(parent->child)
+  (0,1) embed|attn1|mlp1 -> attn2|mlp2|attn3
+  (1,2) attn2|mlp2|attn3 -> mlp3|proj
+
+ScT_cumulative(rows=state, cols=block)
+0,0,0
+0,0,0
+4,4,4
+4,4,4
+4,4,4
+
+ScT_delta_per_state(rows=state, cols=block)
+0,0,0
+0,0,0
+4,4,4
+0,0,0
+0,0,0
+
+MeT_S(rows=state, cols=block)
+0,0,0
+0,0,0
+4,4,4
+4,4,4
+4,4,4
+
+MeT_D(rows=state, cols=block)
+0,0,0
+0,0,0
+4,4,4
+4,4,4
+4,4,4
+
+block_to_state_mapping
+  embed|attn1|mlp1: S2:+4
+  attn2|mlp2|attn3: S2:+4
+  mlp3|proj: S2:+4
+
+layer_to_state_mapping
+  embed: S2:+4
+  attn1: S2:+4
+  mlp1: S2:+4
+  attn2: S2:+4
+  mlp2: S2:+4
+  attn3: S2:+4
+  mlp3: S2:+4
+  proj: S2:+4

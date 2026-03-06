@@ -1,0 +1,87 @@
+network=densenet
+source_ref=src/nns/densenet.cpp
+batch_size=64
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+compute_latency=15211293875.914055
+compute_energy=597.200000
+memory_latency=0.085938
+memory_energy=2.640000
+latency=15211293875.999992
+energy=599.840000
+edp=9124342518579.835938
+
+states
+  idx=0 name=S0 category=warmup active_pe=1 pe_span=PE0..PE0 active_blocks=['db1_l1|db1_l2|trans1'] assigned_sub_batches=0
+  idx=1 name=S1 category=warmup active_pe=2 pe_span=PE0..PE1 active_blocks=['db1_l1|db1_l2|trans1', 'db2_l1|db2_l2|trans2'] assigned_sub_batches=0
+  idx=2 name=S2 category=warmup active_pe=3 pe_span=PE0..PE2 active_blocks=['db1_l1|db1_l2|trans1', 'db2_l1|db2_l2|trans2', 'db3_l1|db3_l2|trans3'] assigned_sub_batches=1
+  idx=3 name=S3 category=steady active_pe=4 pe_span=PE0..PE3 active_blocks=['db1_l1|db1_l2|trans1', 'db2_l1|db2_l2|trans2', 'db3_l1|db3_l2|trans3', 'classifier'] assigned_sub_batches=1
+  idx=4 name=S4 category=drain active_pe=3 pe_span=PE0..PE2 active_blocks=['db2_l1|db2_l2|trans2', 'db3_l1|db3_l2|trans3', 'classifier'] assigned_sub_batches=0
+  idx=5 name=S5 category=drain active_pe=2 pe_span=PE0..PE1 active_blocks=['db3_l1|db3_l2|trans3', 'classifier'] assigned_sub_batches=0
+  idx=6 name=S6 category=drain active_pe=1 pe_span=PE0..PE0 active_blocks=['classifier'] assigned_sub_batches=1
+
+blocks(columns in ScT/MeT)
+  col=0 block=db1_l1|db1_l2|trans1 layers=['db1_l1', 'db1_l2', 'trans1']
+  col=1 block=db2_l1|db2_l2|trans2 layers=['db2_l1', 'db2_l2', 'trans2']
+  col=2 block=db3_l1|db3_l2|trans3 layers=['db3_l1', 'db3_l2', 'trans3']
+  col=3 block=classifier layers=['classifier']
+
+block_dependencies(parent->child)
+  (0,1) db1_l1|db1_l2|trans1 -> db2_l1|db2_l2|trans2
+  (1,2) db2_l1|db2_l2|trans2 -> db3_l1|db3_l2|trans3
+  (2,3) db3_l1|db3_l2|trans3 -> classifier
+
+ScT_cumulative(rows=state, cols=block)
+0,0,0,0
+0,0,0,0
+1,1,1,0
+2,2,2,1
+2,2,2,1
+2,2,2,1
+2,2,2,2
+
+ScT_delta_per_state(rows=state, cols=block)
+0,0,0,0
+0,0,0,0
+1,1,1,0
+1,1,1,1
+0,0,0,0
+0,0,0,0
+0,0,0,1
+
+MeT_S(rows=state, cols=block)
+0,0,0,0
+0,0,0,0
+1,1,0,0
+2,2,1,1
+2,2,1,1
+2,2,1,1
+2,2,2,2
+
+MeT_D(rows=state, cols=block)
+0,0,0,0
+0,0,0,0
+1,1,0,0
+2,2,1,1
+2,2,1,1
+2,2,1,1
+2,2,2,2
+
+block_to_state_mapping
+  db1_l1|db1_l2|trans1: S2:+1 S3:+1
+  db2_l1|db2_l2|trans2: S2:+1 S3:+1
+  db3_l1|db3_l2|trans3: S2:+1 S3:+1
+  classifier: S3:+1 S6:+1
+
+layer_to_state_mapping
+  db1_l1: S2:+1 S3:+1
+  db1_l2: S2:+1 S3:+1
+  trans1: S2:+1 S3:+1
+  db2_l1: S2:+1 S3:+1
+  db2_l2: S2:+1 S3:+1
+  trans2: S2:+1 S3:+1
+  db3_l1: S2:+1 S3:+1
+  db3_l2: S2:+1 S3:+1
+  trans3: S2:+1 S3:+1
+  classifier: S3:+1 S6:+1

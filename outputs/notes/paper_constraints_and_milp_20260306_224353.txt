@@ -1,0 +1,57 @@
+Crane paper constraint summary (from 3725843.3756023.pdf)
+
+Source:
+- PDF path: C:/Users/Happend Outerwall/Documents/xwechat_files/wxid_qrjemeh2xdvj22_da41/msg/file/2026-03/3725843.3756023.pdf
+- extracted text: outputs/paper/crane_paper_extracted_clean.txt
+
+1) Core scheduling representation
+- Block hierarchy (Section 4, lines around 545-560): model is recursively partitioned into blocks/sub-blocks.
+- State set for one block with N sub-blocks: S_B = {1..2N-1} (lines around 564-579).
+- State workload variable s_i (line around 572): number of sub-batches processed in state i.
+
+2) ScT constraints (Section 5.1)
+- Definition of ScT (lines around 698-712): cumulative processed sub-batches per state and sub-block.
+- Constraint form equivalence (lines around 713-736): Eq.1~Eq.6.
+  - integer/non-negative
+  - boundary constraints
+  - monotonic cumulative progress
+  - dependency-safe ordering
+  - cumulative update from s_i
+
+3) MeT constraints (Section 5.2)
+- Definition of MeT (lines around 828-850): MeT_D and MeT_S are lower bounds of stored sub-batch ranges in DRAM/SRAM.
+- Coupling with ScT (lines around 847-853):
+  - SRAM range: (MeT_S, ScT]
+  - DRAM range: (MeT_D, ScT]
+- Construction constraints Eq.7~Eq.12 (lines around 921-942):
+  - integer/non-negative
+  - monotonic lower bounds over states
+  - bounded by ScT
+  - dependency-safe availability
+  - SRAM/DRAM capacity constraints
+
+4) Recomputation constraints (training, Section 5.3)
+- Forward/backward coupled via ScT and MeT.
+- Additional forward-end ordering constraint Eq.13 (lines around 985-989).
+- Backward-step ScT constraint Eq.14 (lines around 997-1006).
+
+5) How paper explores optimum (Section 5.5)
+- Enumerate candidate sub-batch sizes BS_sub (lines around 1230-1232).
+- Build ScT with Eq.1~Eq.6, solve with MILP for compute objective (Eq.22, lines around 1235-1245).
+- Keep Top-K1 candidates, then build MeT and solve MILP for traffic objective (Eq.23, lines around 1253-1263).
+- Keep Top-K2 candidates and continue evaluation.
+
+6) Hierarchical block optimization (Section 6)
+- Step-1 Graph Partition: merge strict linear dependency chains into blocks; branch/merge points form higher-level blocks (lines around 1321-1336).
+- Step-2 Gradual Partition: iteratively refine lower-level block partition and re-optimize top-level schedule until convergence (lines around 1337-1370).
+
+Implementation mapping in this project
+- ScT MILP: scheduler/paper_milp.py
+- MeT MILP: scheduler/memory_table.py
+- Graph partition and chain merge: scheduler/block.py
+- End-to-end search: search/scheduler_search.py
+- Official network run + detailed txt output: example/run_official_nns_suite.py
+
+About official src/nns networks
+- Official files define architecture/topology construction (layers, operators, dependencies), not trained weights.
+- Therefore scheduling experiment here uses architecture-level workload descriptors and dependency structure.

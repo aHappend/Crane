@@ -1,0 +1,72 @@
+network=gnmt
+source_ref=src/nns/gnmt.cpp
+batch_size=128
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+compute_latency=68078431372.549026
+compute_energy=1455.200000
+memory_latency=0.000000
+memory_energy=0.000000
+latency=68078431372.549026
+energy=1455.200000
+edp=99067733333333.343750
+
+states
+  idx=0 name=S0 category=warmup active_pe=1 pe_span=PE0..PE0 active_blocks=['src_embed|enc_lstm1|enc_lstm2'] assigned_sub_batches=0
+  idx=1 name=S1 category=warmup active_pe=2 pe_span=PE0..PE1 active_blocks=['src_embed|enc_lstm1|enc_lstm2', 'enc_lstm3|dec_lstm1|dec_lstm2'] assigned_sub_batches=0
+  idx=2 name=S2 category=steady active_pe=3 pe_span=PE0..PE2 active_blocks=['src_embed|enc_lstm1|enc_lstm2', 'enc_lstm3|dec_lstm1|dec_lstm2', 'attn|softmax'] assigned_sub_batches=4
+  idx=3 name=S3 category=drain active_pe=2 pe_span=PE0..PE1 active_blocks=['enc_lstm3|dec_lstm1|dec_lstm2', 'attn|softmax'] assigned_sub_batches=0
+  idx=4 name=S4 category=drain active_pe=1 pe_span=PE0..PE0 active_blocks=['attn|softmax'] assigned_sub_batches=0
+
+blocks(columns in ScT/MeT)
+  col=0 block=src_embed|enc_lstm1|enc_lstm2 layers=['src_embed', 'enc_lstm1', 'enc_lstm2']
+  col=1 block=enc_lstm3|dec_lstm1|dec_lstm2 layers=['enc_lstm3', 'dec_lstm1', 'dec_lstm2']
+  col=2 block=attn|softmax layers=['attn', 'softmax']
+
+block_dependencies(parent->child)
+  (0,1) src_embed|enc_lstm1|enc_lstm2 -> enc_lstm3|dec_lstm1|dec_lstm2
+  (1,2) enc_lstm3|dec_lstm1|dec_lstm2 -> attn|softmax
+
+ScT_cumulative(rows=state, cols=block)
+0,0,0
+0,0,0
+4,4,4
+4,4,4
+4,4,4
+
+ScT_delta_per_state(rows=state, cols=block)
+0,0,0
+0,0,0
+4,4,4
+0,0,0
+0,0,0
+
+MeT_S(rows=state, cols=block)
+0,0,0
+0,0,0
+4,4,4
+4,4,4
+4,4,4
+
+MeT_D(rows=state, cols=block)
+0,0,0
+0,0,0
+4,4,4
+4,4,4
+4,4,4
+
+block_to_state_mapping
+  src_embed|enc_lstm1|enc_lstm2: S2:+4
+  enc_lstm3|dec_lstm1|dec_lstm2: S2:+4
+  attn|softmax: S2:+4
+
+layer_to_state_mapping
+  src_embed: S2:+4
+  enc_lstm1: S2:+4
+  enc_lstm2: S2:+4
+  enc_lstm3: S2:+4
+  dec_lstm1: S2:+4
+  dec_lstm2: S2:+4
+  attn: S2:+4
+  softmax: S2:+4

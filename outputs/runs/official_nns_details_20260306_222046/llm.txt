@@ -1,0 +1,87 @@
+network=llm
+source_ref=src/nns/llm.cpp
+batch_size=128
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+compute_latency=149302325581.395355
+compute_energy=3617.600000
+memory_latency=0.000000
+memory_energy=0.000000
+latency=149302325581.395355
+energy=3617.600000
+edp=540116093023255.875000
+
+states
+  idx=0 name=S0 category=warmup active_pe=1 pe_span=PE0..PE0 active_blocks=['token_embed|rope|attn1'] assigned_sub_batches=0
+  idx=1 name=S1 category=warmup active_pe=2 pe_span=PE0..PE1 active_blocks=['token_embed|rope|attn1', 'mlp1|attn2|mlp2'] assigned_sub_batches=0
+  idx=2 name=S2 category=warmup active_pe=3 pe_span=PE0..PE2 active_blocks=['token_embed|rope|attn1', 'mlp1|attn2|mlp2', 'attn3|mlp3|norm'] assigned_sub_batches=0
+  idx=3 name=S3 category=steady active_pe=4 pe_span=PE0..PE3 active_blocks=['token_embed|rope|attn1', 'mlp1|attn2|mlp2', 'attn3|mlp3|norm', 'head'] assigned_sub_batches=4
+  idx=4 name=S4 category=drain active_pe=3 pe_span=PE0..PE2 active_blocks=['mlp1|attn2|mlp2', 'attn3|mlp3|norm', 'head'] assigned_sub_batches=0
+  idx=5 name=S5 category=drain active_pe=2 pe_span=PE0..PE1 active_blocks=['attn3|mlp3|norm', 'head'] assigned_sub_batches=0
+  idx=6 name=S6 category=drain active_pe=1 pe_span=PE0..PE0 active_blocks=['head'] assigned_sub_batches=0
+
+blocks(columns in ScT/MeT)
+  col=0 block=token_embed|rope|attn1 layers=['token_embed', 'rope', 'attn1']
+  col=1 block=mlp1|attn2|mlp2 layers=['mlp1', 'attn2', 'mlp2']
+  col=2 block=attn3|mlp3|norm layers=['attn3', 'mlp3', 'norm']
+  col=3 block=head layers=['head']
+
+block_dependencies(parent->child)
+  (0,1) token_embed|rope|attn1 -> mlp1|attn2|mlp2
+  (1,2) mlp1|attn2|mlp2 -> attn3|mlp3|norm
+  (2,3) attn3|mlp3|norm -> head
+
+ScT_cumulative(rows=state, cols=block)
+0,0,0,0
+0,0,0,0
+0,0,0,0
+4,4,4,4
+4,4,4,4
+4,4,4,4
+4,4,4,4
+
+ScT_delta_per_state(rows=state, cols=block)
+0,0,0,0
+0,0,0,0
+0,0,0,0
+4,4,4,4
+0,0,0,0
+0,0,0,0
+0,0,0,0
+
+MeT_S(rows=state, cols=block)
+0,0,0,0
+0,0,0,0
+0,0,0,0
+4,4,4,4
+4,4,4,4
+4,4,4,4
+4,4,4,4
+
+MeT_D(rows=state, cols=block)
+0,0,0,0
+0,0,0,0
+0,0,0,0
+4,4,4,4
+4,4,4,4
+4,4,4,4
+4,4,4,4
+
+block_to_state_mapping
+  token_embed|rope|attn1: S3:+4
+  mlp1|attn2|mlp2: S3:+4
+  attn3|mlp3|norm: S3:+4
+  head: S3:+4
+
+layer_to_state_mapping
+  token_embed: S3:+4
+  rope: S3:+4
+  attn1: S3:+4
+  mlp1: S3:+4
+  attn2: S3:+4
+  mlp2: S3:+4
+  attn3: S3:+4
+  mlp3: S3:+4
+  norm: S3:+4
+  head: S3:+4
