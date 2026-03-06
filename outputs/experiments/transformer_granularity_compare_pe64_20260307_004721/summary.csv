@@ -1,0 +1,3 @@
+mode,input_blocks,scheduled_blocks,num_states,best_sub_batch,state_batches,latency,energy,edp,sct_solver,met_solver
+stage_level,8,8,15,32,"0,0,0,0,0,0,0,4,0,0,0,0,0,0,0",82241985167.163712,5.252792,432000021628.866333,ortools-scip,ortools-scip
+layer_level,471,30,59,32,"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",170153235984.412354,10.842351,1844861100997.182373,ortools-scip,ortools-scip
