@@ -1,0 +1,172 @@
+official_nns_suite run: 20260307_233733
+count=12
+details_dir=C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733
+
+[alexnet]
+  source_ref: src/nns/alexnet.cpp
+  batch_size: 64
+  best_sub_batch: 32
+  num_blocks: 3
+  num_states: 5
+  state_batches: 1,1,0,1,1
+  active_states: 4
+  latency: 8426865570.279054
+  energy: 2.183565
+  edp: 18400606109.248241
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\alexnet.txt
+  html_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\alexnet.html
+
+[darknet19]
+  source_ref: src/nns/darknet19.cpp
+  batch_size: 64
+  best_sub_batch: 32
+  num_blocks: 3
+  num_states: 5
+  state_batches: 1,1,0,1,1
+  active_states: 4
+  latency: 13355251103.476559
+  energy: 2.764277
+  edp: 36917608318.217735
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\darknet19.txt
+  html_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\darknet19.html
+
+[densenet]
+  source_ref: src/nns/densenet.cpp
+  batch_size: 64
+  best_sub_batch: 32
+  num_blocks: 4
+  num_states: 7
+  state_batches: 1,1,0,0,1,1,0
+  active_states: 4
+  latency: 14365744544.675453
+  energy: 3.845858
+  edp: 55248608960.469368
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\densenet.txt
+  html_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\densenet.html
+
+[gnmt]
+  source_ref: src/nns/gnmt.cpp
+  batch_size: 128
+  best_sub_batch: 32
+  num_blocks: 3
+  num_states: 5
+  state_batches: 3,1,0,3,1
+  active_states: 4
+  latency: 53466888726.595810
+  energy: 10.846158
+  edp: 579910317745.498657
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\gnmt.txt
+  html_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\gnmt.html
+
+[googlenet]
+  source_ref: src/nns/googlenet.cpp
+  batch_size: 64
+  best_sub_batch: 32
+  num_blocks: 3
+  num_states: 5
+  state_batches: 1,1,0,1,1
+  active_states: 4
+  latency: 18714908642.714691
+  energy: 2.531893
+  edp: 47384144323.235222
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\googlenet.txt
+  html_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\googlenet.html
+
+[incep_resnet]
+  source_ref: src/nns/incep_resnet.cpp
+  batch_size: 64
+  best_sub_batch: 32
+  num_blocks: 3
+  num_states: 5
+  state_batches: 1,1,0,1,1
+  active_states: 4
+  latency: 27925247955.107315
+  energy: 3.046664
+  edp: 85078854089.753021
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\incep_resnet.txt
+  html_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\incep_resnet.html
+
+[llm]
+  source_ref: src/nns/llm.cpp
+  batch_size: 128
+  best_sub_batch: 32
+  num_blocks: 4
+  num_states: 7
+  state_batches: 1,1,1,1,1,1,1
+  active_states: 7
+  latency: 175263765310.488831
+  energy: 17.031572
+  edp: 2985017515837.772949
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\llm.txt
+  html_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\llm.html
+
+[pnasnet]
+  source_ref: src/nns/pnasnet.cpp
+  batch_size: 64
+  best_sub_batch: 32
+  num_blocks: 3
+  num_states: 5
+  state_batches: 1,1,0,1,1
+  active_states: 4
+  latency: 19766889156.438915
+  energy: 2.652876
+  edp: 52439103632.349037
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\pnasnet.txt
+  html_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\pnasnet.html
+
+[resnet]
+  source_ref: src/nns/resnet.cpp
+  batch_size: 64
+  best_sub_batch: 32
+  num_blocks: 3
+  num_states: 5
+  state_batches: 1,1,0,1,1
+  active_states: 4
+  latency: 30591189352.670883
+  energy: 2.938506
+  edp: 89892405814.169418
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\resnet.txt
+  html_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\resnet.html
+
+[transformer]
+  source_ref: src/nns/transformer.cpp
+  batch_size: 128
+  best_sub_batch: 32
+  num_blocks: 3
+  num_states: 5
+  state_batches: 3,1,0,3,1
+  active_states: 4
+  latency: 80548958729.384888
+  energy: 14.863043
+  edp: 1197202626859.427490
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\transformer.txt
+  html_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\transformer.html
+
+[vgg]
+  source_ref: src/nns/vgg.cpp
+  batch_size: 64
+  best_sub_batch: 32
+  num_blocks: 3
+  num_states: 5
+  state_batches: 1,1,0,1,1
+  active_states: 4
+  latency: 16428125688.200951
+  energy: 3.300814
+  edp: 54226191422.360039
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\vgg.txt
+  html_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\vgg.html
+
+[zfnet]
+  source_ref: src/nns/zfnet.cpp
+  batch_size: 64
+  best_sub_batch: 32
+  num_blocks: 3
+  num_states: 5
+  state_batches: 1,1,0,1,1
+  active_states: 4
+  latency: 7623269924.872192
+  energy: 2.023069
+  edp: 15422401086.242552
+  detail_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\zfnet.txt
+  html_file: C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\outputs\runs\official_nns_details_20260307_233733\zfnet.html
+
