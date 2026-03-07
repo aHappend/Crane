@@ -1,0 +1,90 @@
+network=transformer
+source_ref=src/nns/transformer.cpp
+mode=stage_level
+stage_definition=official_nns_structure_html
+block_merge_enabled=True
+max_layers_per_block=24
+input_blocks=5
+scheduled_blocks=5
+num_states=9
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=644669228443.890991
+energy=9.269336
+edp=5975655689251.685547
+hierarchy_level=0
+hierarchy_note_count=9
+
+scheduled_blocks
+  0: word_embed_enc
+  1: 6x encoder
+  2: word_embed_dec
+  3: 6x decoder
+  4: proj
+
+states
+  idx=0 name=S0 category=warmup active_pe=1 assigned_sub_batches=0 active_blocks=['word_embed_enc']
+  idx=1 name=S1 category=warmup active_pe=2 assigned_sub_batches=0 active_blocks=['word_embed_enc', '6x encoder']
+  idx=2 name=S2 category=warmup active_pe=3 assigned_sub_batches=0 active_blocks=['word_embed_enc', '6x encoder', 'word_embed_dec']
+  idx=3 name=S3 category=warmup active_pe=4 assigned_sub_batches=0 active_blocks=['word_embed_enc', '6x encoder', 'word_embed_dec', '6x decoder']
+  idx=4 name=S4 category=steady active_pe=5 assigned_sub_batches=4 active_blocks=['word_embed_enc', '6x encoder', 'word_embed_dec', '6x decoder', 'proj']
+  idx=5 name=S5 category=drain active_pe=4 assigned_sub_batches=0 active_blocks=['6x encoder', 'word_embed_dec', '6x decoder', 'proj']
+  idx=6 name=S6 category=drain active_pe=3 assigned_sub_batches=0 active_blocks=['word_embed_dec', '6x decoder', 'proj']
+  idx=7 name=S7 category=drain active_pe=2 assigned_sub_batches=0 active_blocks=['6x decoder', 'proj']
+  idx=8 name=S8 category=drain active_pe=1 assigned_sub_batches=0 active_blocks=['proj']
+
+ScT_cumulative(rows=state, cols=block)
+0,0,0,0,0
+0,0,0,0,0
+0,0,0,0,0
+0,0,0,0,0
+4,4,4,4,4
+4,4,4,4,4
+4,4,4,4,4
+4,4,4,4,4
+4,4,4,4,4
+
+ScT_delta_per_state(rows=state, cols=block)
+0,0,0,0,0
+0,0,0,0,0
+0,0,0,0,0
+0,0,0,0,0
+4,4,4,4,4
+0,0,0,0,0
+0,0,0,0,0
+0,0,0,0,0
+0,0,0,0,0
+
+MeT_S(rows=state, cols=block)
+0,0,0,0,0
+0,0,0,0,0
+0,0,0,0,0
+0,0,0,0,0
+4,4,4,4,4
+4,4,4,4,4
+4,4,4,4,4
+4,4,4,4,4
+4,4,4,4,4
+
+MeT_D(rows=state, cols=block)
+0,0,0,0,0
+0,0,0,0,0
+0,0,0,0,0
+0,0,0,0,0
+4,4,4,4,4
+4,4,4,4,4
+4,4,4,4,4
+4,4,4,4,4
+4,4,4,4,4
+
+Hierarchy_notes
+  level=0 iter=0 parent_edp=1.904438e+13 blocks=5
+  level=0 iter=0 block=6x encoder child_blocks=162 child_edp=1.492173e+13 flops_proxy=9.392280e+11 output_proxy=2.750000e+03
+  level=0 iter=0 block=6x decoder child_blocks=306 child_edp=1.836568e+13 flops_proxy=1.706448e+12 output_proxy=4.760000e+03
+  level=0 iter=0 child_feedback_improvement=6.862247e-01
+  level=0 iter=1 parent_edp=5.975656e+12 blocks=5
+  level=0 iter=1 block=6x encoder child_blocks=162 child_edp=1.492173e+13 flops_proxy=9.392280e+11 output_proxy=2.750000e+03
+  level=0 iter=1 block=6x decoder child_blocks=306 child_edp=1.836568e+13 flops_proxy=1.706448e+12 output_proxy=4.760000e+03
+  level=0 iter=1 child_feedback_improvement=-2.306223e+01
+  level=0 iter=1 converge_by_theta theta=0.01

@@ -172,10 +172,10 @@ th {{ background:#f3f4f6; }}
 <div class='grid'>{meta_html}</div>
 {state_table}
 <h2>Inter-layer Scheduling</h2>
-{_matrix_html('ScT cumulative (state x block)', state_order, [f'B{{i}}' for i in range(len(scheduled_blocks))], sct)}
-{_matrix_html('ScT delta per state (state x block)', state_order, [f'B{{i}}' for i in range(len(scheduled_blocks))], delta)}
-{_matrix_html('MeT_S (state x block)', state_order, [f'B{{i}}' for i in range(len(scheduled_blocks))], met_s)}
-{_matrix_html('MeT_D (state x block)', state_order, [f'B{{i}}' for i in range(len(scheduled_blocks))], met_d)}
+{_matrix_html('ScT cumulative (state x block)', state_order, [f'B{i}' for i in range(len(scheduled_blocks))], sct)}
+{_matrix_html('ScT delta per state (state x block)', state_order, [f'B{i}' for i in range(len(scheduled_blocks))], delta)}
+{_matrix_html('MeT_S (state x block)', state_order, [f'B{i}' for i in range(len(scheduled_blocks))], met_s)}
+{_matrix_html('MeT_D (state x block)', state_order, [f'B{i}' for i in range(len(scheduled_blocks))], met_d)}
 <h2>Intra-block (Layer-in-Block) View</h2>
 {''.join(block_cards)}
 {hierarchy_html}
@@ -185,3 +185,4 @@ th {{ background:#f3f4f6; }}
 """
 
     out.write_text(html, encoding='utf-8')
+

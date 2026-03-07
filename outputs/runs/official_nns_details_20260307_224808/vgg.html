@@ -1,0 +1,39 @@
+
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>vgg schedule</title>
+<style>
+body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 18px; color: #1f2937; background: linear-gradient(160deg,#f6fbff,#eef7f3); }
+h1 { margin: 0 0 12px 0; }
+h2 { margin: 18px 0 8px 0; }
+h3 { margin: 14px 0 6px 0; }
+.grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap:8px; }
+.kv { background:#fff; border:1px solid #d9e2ec; border-radius:8px; padding:8px 10px; display:flex; justify-content:space-between; gap:8px; }
+.kv span { color:#52606d; }
+.table-wrap { overflow:auto; border:1px solid #d9e2ec; border-radius:8px; background:#fff; }
+table { border-collapse:collapse; width:100%; min-width:640px; }
+th,td { border:1px solid #e5e7eb; padding:6px 8px; text-align:center; font-size:12px; }
+th { background:#f3f4f6; }
+.card { background:#fff; border:1px solid #d9e2ec; border-radius:8px; padding:10px; margin:8px 0; }
+.badge { display:inline-block; border:1px solid #93c5fd; background:#dbeafe; border-radius:999px; padding:2px 8px; margin:2px 4px 2px 0; font-size:12px; }
+.muted { color:#6b7280; }
+</style>
+</head>
+<body>
+<h1>vgg schedule</h1>
+<h2>Run Meta</h2>
+<div class='grid'><div class='kv'><span>network</span><b>vgg</b></div><div class='kv'><span>source_ref</span><b>src/nns/vgg.cpp</b></div><div class='kv'><span>batch_size</span><b>64</b></div><div class='kv'><span>num_pes</span><b>4</b></div><div class='kv'><span>best_sub_batch</span><b>32</b></div><div class='kv'><span>sct_solver</span><b>ortools-scip</b></div><div class='kv'><span>met_solver</span><b>ortools-scip</b></div><div class='kv'><span>latency</span><b>16428125688.200951</b></div><div class='kv'><span>energy</span><b>3.300814</b></div><div class='kv'><span>edp</span><b>54226191422.360039</b></div></div>
+<h3>State Overview</h3><div class='table-wrap'><table><thead><tr><th>State</th><th>Category</th><th>Assigned Sub-batches</th><th>Active Blocks</th></tr></thead><tbody><tr><td>S0</td><td>warmup</td><td>1</td><td>conv1|conv2|conv3</td></tr><tr><td>S1</td><td>warmup</td><td>1</td><td>conv1|conv2|conv3, conv4|conv5|conv6</td></tr><tr><td>S2</td><td>steady</td><td>0</td><td>conv1|conv2|conv3, conv4|conv5|conv6, fc6|fc7|fc8</td></tr><tr><td>S3</td><td>drain</td><td>1</td><td>conv4|conv5|conv6, fc6|fc7|fc8</td></tr><tr><td>S4</td><td>drain</td><td>1</td><td>fc6|fc7|fc8</td></tr></tbody></table></div>
+<h2>Inter-layer Scheduling</h2>
+<h3>ScT cumulative (state x block)</h3><div class='table-wrap'><table><thead><tr><th>State</th><th>B0</th><th>B1</th><th>B2</th></tr></thead><tbody><tr><th>S0</th><td style='background:rgb(230,180,180)'>1</td><td style='background:rgb(230,245,245)'>0</td><td style='background:rgb(230,245,245)'>0</td></tr><tr><th>S1</th><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,180,180)'>1</td><td style='background:rgb(230,245,245)'>0</td></tr><tr><th>S2</th><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,180,180)'>1</td><td style='background:rgb(230,245,245)'>0</td></tr><tr><th>S3</th><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,180,180)'>1</td></tr><tr><th>S4</th><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,115,115)'>2</td></tr></tbody></table></div>
+<h3>ScT delta per state (state x block)</h3><div class='table-wrap'><table><thead><tr><th>State</th><th>B0</th><th>B1</th><th>B2</th></tr></thead><tbody><tr><th>S0</th><td style='background:rgb(230,115,115)'>1</td><td style='background:rgb(230,245,245)'>0</td><td style='background:rgb(230,245,245)'>0</td></tr><tr><th>S1</th><td style='background:rgb(230,115,115)'>1</td><td style='background:rgb(230,115,115)'>1</td><td style='background:rgb(230,245,245)'>0</td></tr><tr><th>S2</th><td style='background:rgb(230,245,245)'>0</td><td style='background:rgb(230,245,245)'>0</td><td style='background:rgb(230,245,245)'>0</td></tr><tr><th>S3</th><td style='background:rgb(230,245,245)'>0</td><td style='background:rgb(230,115,115)'>1</td><td style='background:rgb(230,115,115)'>1</td></tr><tr><th>S4</th><td style='background:rgb(230,245,245)'>0</td><td style='background:rgb(230,245,245)'>0</td><td style='background:rgb(230,115,115)'>1</td></tr></tbody></table></div>
+<h3>MeT_S (state x block)</h3><div class='table-wrap'><table><thead><tr><th>State</th><th>B0</th><th>B1</th><th>B2</th></tr></thead><tbody><tr><th>S0</th><td style='background:rgb(230,180,180)'>1</td><td style='background:rgb(230,245,245)'>0</td><td style='background:rgb(230,245,245)'>0</td></tr><tr><th>S1</th><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,180,180)'>1</td><td style='background:rgb(230,245,245)'>0</td></tr><tr><th>S2</th><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,180,180)'>1</td><td style='background:rgb(230,245,245)'>0</td></tr><tr><th>S3</th><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,180,180)'>1</td></tr><tr><th>S4</th><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,115,115)'>2</td></tr></tbody></table></div>
+<h3>MeT_D (state x block)</h3><div class='table-wrap'><table><thead><tr><th>State</th><th>B0</th><th>B1</th><th>B2</th></tr></thead><tbody><tr><th>S0</th><td style='background:rgb(230,245,245)'>0</td><td style='background:rgb(230,245,245)'>0</td><td style='background:rgb(230,245,245)'>0</td></tr><tr><th>S1</th><td style='background:rgb(230,180,180)'>1</td><td style='background:rgb(230,245,245)'>0</td><td style='background:rgb(230,245,245)'>0</td></tr><tr><th>S2</th><td style='background:rgb(230,180,180)'>1</td><td style='background:rgb(230,245,245)'>0</td><td style='background:rgb(230,245,245)'>0</td></tr><tr><th>S3</th><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,180,180)'>1</td><td style='background:rgb(230,245,245)'>0</td></tr><tr><th>S4</th><td style='background:rgb(230,115,115)'>2</td><td style='background:rgb(230,180,180)'>1</td><td style='background:rgb(230,245,245)'>0</td></tr></tbody></table></div>
+<h2>Intra-block (Layer-in-Block) View</h2>
+<div class='card'><h4>Block[0] conv1|conv2|conv3</h4><p><b>Inner layers (3):</b> conv1, conv2, conv3</p><p><b>State schedule:</b> <span class='badge'>S0:+1</span> <span class='badge'>S1:+1</span></p></div><div class='card'><h4>Block[1] conv4|conv5|conv6</h4><p><b>Inner layers (3):</b> conv4, conv5, conv6</p><p><b>State schedule:</b> <span class='badge'>S1:+1</span> <span class='badge'>S3:+1</span></p></div><div class='card'><h4>Block[2] fc6|fc7|fc8</h4><p><b>Inner layers (3):</b> fc6, fc7, fc8</p><p><b>State schedule:</b> <span class='badge'>S3:+1</span> <span class='badge'>S4:+1</span></p></div>
+<h3>Hierarchy Traces</h3><div class='card'><h4>Trace L0 root</h4><p>best_sub_batch=32, blocks=3, states=5</p></div>
+
+</body>
+</html>

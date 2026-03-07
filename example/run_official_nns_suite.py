@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
 from model.layer import Layer
 from scheduler.block import Block
 from search.scheduler_search import SearchConfig, search_schedule
+from example.schedule_html import write_schedule_html
 
 
 def official_specs():
@@ -298,7 +299,33 @@ def main():
             f.write("\nlayer_to_state_mapping\n")
             for lname, _, _ in specs[name]["layers"]:
                 f.write(f"  {lname}: {layer_to_state.get(lname, 'none')}\n")
-
+        detail_html = detail_dir / f"{name}.html"
+        write_schedule_html(
+            detail_html,
+            title=f"{name} schedule",
+            meta={
+                "network": name,
+                "source_ref": specs[name]["source_ref"],
+                "batch_size": specs[name]["batch_size"],
+                "num_pes": 4,
+                "best_sub_batch": result.best_sub_batch,
+                "sct_solver": result.sct_solver_name,
+                "met_solver": result.met_solver_name,
+                "latency": f"{result.total_latency:.6f}",
+                "energy": f"{result.total_energy:.6f}",
+                "edp": f"{result.total_edp:.6f}",
+            },
+            scheduled_blocks=block_names,
+            state_order=list(result.state_order),
+            state_categories=list(result.state_categories),
+            state_batches=[int(x) for x in result.milp_solution.state_batches],
+            state_active_blocks=[[int(v) for v in row] for row in result.state_active_blocks],
+            sct=sct.tolist(),
+            met_s=met_s.tolist(),
+            met_d=met_d.tolist(),
+            hierarchy_notes=list(result.hierarchy_notes),
+            hierarchy_traces=list(result.hierarchy_traces),
+        )
         rows.append(
             {
                 "network": name,
@@ -314,6 +341,7 @@ def main():
                 "energy": f"{result.total_energy:.6f}",
                 "edp": f"{result.total_edp:.6f}",
                 "detail_file": str(detail),
+                "html_file": str(detail_html),
             }
         )
 
@@ -322,7 +350,7 @@ def main():
 
     fields = [
         "network", "source_ref", "batch_size", "best_sub_batch", "num_blocks", "num_states", "state_order",
-        "state_batches", "active_states", "latency", "energy", "edp", "detail_file",
+        "state_batches", "active_states", "latency", "energy", "edp", "detail_file", "html_file",
     ]
     with csv_file.open("w", encoding="utf-8", newline="\n") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
@@ -345,7 +373,8 @@ def main():
             f.write(f"  latency: {r['latency']}\n")
             f.write(f"  energy: {r['energy']}\n")
             f.write(f"  edp: {r['edp']}\n")
-            f.write(f"  detail_file: {r['detail_file']}\n\n")
+            f.write(f"  detail_file: {r['detail_file']}\n")
+            f.write(f"  html_file: {r['html_file']}\n\n")
 
     print(f"txt={txt_file}")
     print(f"csv={csv_file}")
@@ -354,5 +383,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
 

@@ -19,9 +19,9 @@ from scheduler.block import Block
 from search.scheduler_search import SearchConfig, search_schedule
 from example.run_official_nns_suite import official_specs
 from scheduler.hardware_profile import paper_7_2_search_params
+from example.schedule_html import write_schedule_html
 
 
-# Stage layouts from outputs/visualization/official_nns_structure.html
 OFFICIAL_STAGE_LAYOUTS: dict[str, list[tuple[str, int]]] = {
     "alexnet": [
         ("conv1 split", 2),
@@ -91,6 +91,22 @@ class RunOutcome:
     ok: bool
     status: str
     error: str
+
+
+def _fmt_matrix(rows) -> str:
+    return "\n".join(",".join(f"{float(v):.0f}" for v in row) for row in rows)
+
+
+def _delta_from_cumulative(cum):
+    out = []
+    prev = None
+    for row in cum:
+        if prev is None:
+            out.append(list(row))
+        else:
+            out.append([float(v) - float(p) for v, p in zip(row, prev)])
+        prev = list(row)
+    return out
 
 
 def _candidate_sub_batches(batch_size: int) -> list[int]:
@@ -262,6 +278,44 @@ def _compute_one(
         "sct_solver": res.sct_solver_name,
         "met_solver": res.met_solver_name,
         "hierarchy_note_count": len(res.hierarchy_notes),
+        "scheduled_block_names": list(res.scheduled_blocks),
+        "state_order": list(res.state_order),
+        "state_categories": list(res.state_categories),
+        "state_batches": list(res.milp_solution.state_batches),
+        "state_active_blocks": [list(x) for x in res.state_active_blocks],
+        "sct": res.sct.table.tolist(),
+        "met_s": res.met.sram.tolist(),
+        "met_d": res.met.dram.tolist(),
+        "hierarchy_notes": list(res.hierarchy_notes),
+        "hierarchy_traces": list(res.hierarchy_traces),
+    }
+
+
+def _err_payload(msg: str) -> dict:
+    return {
+        "ok": False,
+        "status": "error",
+        "error": msg,
+        "input_blocks": 0,
+        "scheduled_blocks": 0,
+        "num_states": 0,
+        "best_sub_batch": 0,
+        "latency": 0.0,
+        "energy": 0.0,
+        "edp": 0.0,
+        "sct_solver": "",
+        "met_solver": "",
+        "hierarchy_note_count": 0,
+        "scheduled_block_names": [],
+        "state_order": [],
+        "state_categories": [],
+        "state_batches": [],
+        "state_active_blocks": [],
+        "sct": [],
+        "met_s": [],
+        "met_d": [],
+        "hierarchy_notes": [],
+        "hierarchy_traces": [],
     }
 
 
@@ -282,26 +336,53 @@ def _run_single_and_dump(args: argparse.Namespace) -> int:
             hierarchy_theta=float(args.hier_theta),
         )
     except Exception as exc:
-        data = {
-            "ok": False,
-            "status": "error",
-            "error": str(exc),
-            "input_blocks": 0,
-            "scheduled_blocks": 0,
-            "num_states": 0,
-            "best_sub_batch": 0,
-            "latency": 0.0,
-            "energy": 0.0,
-            "edp": 0.0,
-            "sct_solver": "",
-            "met_solver": "",
-            "hierarchy_note_count": 0,
-        }
+        data = _err_payload(str(exc))
 
     out_path = Path(str(args.single_out))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return 0
+
+
+def _write_timeout_or_error_files(
+    detail: Path,
+    html: Path,
+    *,
+    network: str,
+    mode: str,
+    status: str,
+    error: str,
+    timeout_sec: int,
+    num_pes: int,
+) -> None:
+    with detail.open("w", encoding="utf-8", newline="\n") as f:
+        f.write(f"network={network}\n")
+        f.write(f"mode={mode}\n")
+        f.write(f"status={status}\n")
+        if status == "timeout":
+            f.write(f"timeout_sec={timeout_sec}\n")
+        f.write(f"error={error}\n")
+
+    write_schedule_html(
+        html,
+        title=f"{network} {mode} ({status})",
+        meta={
+            "network": network,
+            "mode": mode,
+            "status": status,
+            "num_pes": num_pes,
+        },
+        scheduled_blocks=[],
+        state_order=[],
+        state_categories=[],
+        state_batches=[],
+        state_active_blocks=[],
+        sct=[],
+        met_s=[],
+        met_d=[],
+        hierarchy_notes=[error],
+        hierarchy_traces=[],
+    )
 
 
 def _run_one_with_timeout(
@@ -347,23 +428,22 @@ def _run_one_with_timeout(
     if hierarchical:
         cmd.append("--hierarchical")
 
+    detail = details_dir / f"{network}__{mode}.txt"
+    html = details_dir / f"{network}__{mode}.html"
+
     try:
         cp = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec)
     except subprocess.TimeoutExpired:
-        detail = details_dir / f"{network}__{mode}.txt"
-        with detail.open("w", encoding="utf-8", newline="\n") as f:
-            f.write(f"network={network}\n")
-            f.write(f"mode={mode}\n")
-            f.write(f"source_ref={source_ref}\n")
-            f.write(f"batch_size={batch_size}\n")
-            f.write(f"num_pes={num_pes}\n")
-            f.write(f"max_layers_per_block={max_layers_per_block}\n")
-            f.write(f"hierarchical={hierarchical}\n")
-            f.write(f"hierarchy_depth={hierarchy_depth}\n")
-            f.write(f"hierarchy_iters={hierarchy_iters}\n")
-            f.write(f"hierarchy_theta={hierarchy_theta}\n")
-            f.write("status=timeout\n")
-            f.write(f"timeout_sec={timeout_sec}\n")
+        _write_timeout_or_error_files(
+            detail,
+            html,
+            network=network,
+            mode=mode,
+            status="timeout",
+            error=f"timeout after {timeout_sec}s",
+            timeout_sec=timeout_sec,
+            num_pes=num_pes,
+        )
         return RunOutcome(
             network=network,
             mode=mode,
@@ -385,6 +465,17 @@ def _run_one_with_timeout(
         )
 
     if cp.returncode != 0:
+        err = f"single-run process failed: {cp.stderr.strip()[:400]}"
+        _write_timeout_or_error_files(
+            detail,
+            html,
+            network=network,
+            mode=mode,
+            status="error",
+            error=err,
+            timeout_sec=timeout_sec,
+            num_pes=num_pes,
+        )
         return RunOutcome(
             network=network,
             mode=mode,
@@ -402,10 +493,21 @@ def _run_one_with_timeout(
             hierarchy_note_count=0,
             ok=False,
             status="error",
-            error=f"single-run process failed: {cp.stderr.strip()[:400]}",
+            error=err,
         )
 
     if not temp_json.exists():
+        err = "single-run output json missing"
+        _write_timeout_or_error_files(
+            detail,
+            html,
+            network=network,
+            mode=mode,
+            status="error",
+            error=err,
+            timeout_sec=timeout_sec,
+            num_pes=num_pes,
+        )
         return RunOutcome(
             network=network,
             mode=mode,
@@ -423,7 +525,7 @@ def _run_one_with_timeout(
             hierarchy_note_count=0,
             ok=False,
             status="error",
-            error="single-run output json missing",
+            error=err,
         )
 
     data = json.loads(temp_json.read_text(encoding="utf-8"))
@@ -432,7 +534,6 @@ def _run_one_with_timeout(
     except Exception:
         pass
 
-    detail = details_dir / f"{network}__{mode}.txt"
     with detail.open("w", encoding="utf-8", newline="\n") as f:
         f.write(f"network={network}\n")
         f.write(f"mode={mode}\n")
@@ -445,6 +546,7 @@ def _run_one_with_timeout(
         f.write(f"hierarchy_iters={hierarchy_iters}\n")
         f.write(f"hierarchy_theta={hierarchy_theta}\n")
         f.write(f"status={data['status']}\n")
+
         if data["ok"]:
             f.write(f"input_blocks={data['input_blocks']}\n")
             f.write(f"scheduled_blocks={data['scheduled_blocks']}\n")
@@ -455,9 +557,95 @@ def _run_one_with_timeout(
             f.write(f"hierarchy_note_count={data['hierarchy_note_count']}\n")
             f.write(f"latency={data['latency']:.6f}\n")
             f.write(f"energy={data['energy']:.6f}\n")
-            f.write(f"edp={data['edp']:.6f}\n")
+            f.write(f"edp={data['edp']:.6f}\n\n")
+
+            blocks = list(data.get("scheduled_block_names", []))
+            so = list(data.get("state_order", []))
+            sc = list(data.get("state_categories", []))
+            sb = list(data.get("state_batches", []))
+            sab = list(data.get("state_active_blocks", []))
+            sct = list(data.get("sct", []))
+            met_s = list(data.get("met_s", []))
+            met_d = list(data.get("met_d", []))
+            notes = list(data.get("hierarchy_notes", []))
+
+            f.write("scheduled_blocks\n")
+            for i, name in enumerate(blocks):
+                f.write(f"  {i}: {name}\n")
+
+            f.write("\nstates\n")
+            for i, sname in enumerate(so):
+                act_ids = sab[i] if i < len(sab) else []
+                act_names = [blocks[int(j)] for j in act_ids if 0 <= int(j) < len(blocks)]
+                cat = sc[i] if i < len(sc) else ""
+                batch_i = int(sb[i]) if i < len(sb) else 0
+                f.write(
+                    f"  idx={i} name={sname} category={cat} "
+                    f"assigned_sub_batches={batch_i} active_blocks={act_names}\n"
+                )
+
+            delta = _delta_from_cumulative(sct)
+
+            f.write("\nScT_cumulative(rows=state, cols=block)\n")
+            f.write(_fmt_matrix(sct) + "\n")
+            f.write("\nScT_delta_per_state(rows=state, cols=block)\n")
+            f.write(_fmt_matrix(delta) + "\n")
+            f.write("\nMeT_S(rows=state, cols=block)\n")
+            f.write(_fmt_matrix(met_s) + "\n")
+            f.write("\nMeT_D(rows=state, cols=block)\n")
+            f.write(_fmt_matrix(met_d) + "\n")
+
+            if notes:
+                f.write("\nHierarchy_notes\n")
+                for line in notes:
+                    f.write(f"  {line}\n")
+
+            write_schedule_html(
+                html,
+                title=f"{network} {mode} schedule",
+                meta={
+                    "network": network,
+                    "mode": mode,
+                    "status": data.get("status", "ok"),
+                    "num_pes": num_pes,
+                    "batch_size": batch_size,
+                    "best_sub_batch": data.get("best_sub_batch", 0),
+                    "latency": f"{float(data.get('latency', 0.0)):.6f}",
+                    "energy": f"{float(data.get('energy', 0.0)):.6f}",
+                    "edp": f"{float(data.get('edp', 0.0)):.6f}",
+                    "sct_solver": data.get("sct_solver", ""),
+                    "met_solver": data.get("met_solver", ""),
+                    "hierarchy_note_count": data.get("hierarchy_note_count", 0),
+                },
+                scheduled_blocks=blocks,
+                state_order=so,
+                state_categories=sc,
+                state_batches=[int(x) for x in sb],
+                state_active_blocks=[[int(v) for v in row] for row in sab],
+                sct=[[float(v) for v in row] for row in sct],
+                met_s=[[float(v) for v in row] for row in met_s],
+                met_d=[[float(v) for v in row] for row in met_d],
+                hierarchy_notes=notes,
+                hierarchy_traces=list(data.get("hierarchy_traces", [])),
+            )
         else:
             f.write(f"error={data['error']}\n")
+
+            write_schedule_html(
+                html,
+                title=f"{network} {mode} (error)",
+                meta={"network": network, "mode": mode, "status": data.get("status", "error")},
+                scheduled_blocks=[],
+                state_order=[],
+                state_categories=[],
+                state_batches=[],
+                state_active_blocks=[],
+                sct=[],
+                met_s=[],
+                met_d=[],
+                hierarchy_notes=[str(data.get("error", "unknown error"))],
+                hierarchy_traces=[],
+            )
 
     return RunOutcome(
         network=network,

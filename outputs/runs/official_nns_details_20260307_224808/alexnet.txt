@@ -1,0 +1,73 @@
+network=alexnet
+source_ref=src/nns/alexnet.cpp
+batch_size=64
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+compute_latency=8426865570.279054
+compute_energy=0.031065
+memory_latency=0.172119
+memory_energy=2.152500
+latency=8426865570.279054
+energy=2.183565
+edp=18400606109.248241
+
+states
+  idx=0 name=S0 category=warmup active_pe=1 pe_span=PE0..PE0 active_blocks=['conv1|pool1|conv2'] assigned_sub_batches=1
+  idx=1 name=S1 category=warmup active_pe=2 pe_span=PE0..PE1 active_blocks=['conv1|pool1|conv2', 'conv3|conv4|conv5'] assigned_sub_batches=1
+  idx=2 name=S2 category=steady active_pe=3 pe_span=PE0..PE2 active_blocks=['conv1|pool1|conv2', 'conv3|conv4|conv5', 'fc6|fc7|fc8'] assigned_sub_batches=0
+  idx=3 name=S3 category=drain active_pe=2 pe_span=PE0..PE1 active_blocks=['conv3|conv4|conv5', 'fc6|fc7|fc8'] assigned_sub_batches=1
+  idx=4 name=S4 category=drain active_pe=1 pe_span=PE0..PE0 active_blocks=['fc6|fc7|fc8'] assigned_sub_batches=1
+
+blocks(columns in ScT/MeT)
+  col=0 block=conv1|pool1|conv2 layers=['conv1', 'pool1', 'conv2']
+  col=1 block=conv3|conv4|conv5 layers=['conv3', 'conv4', 'conv5']
+  col=2 block=fc6|fc7|fc8 layers=['fc6', 'fc7', 'fc8']
+
+block_dependencies(parent->child)
+  (0,1) conv1|pool1|conv2 -> conv3|conv4|conv5
+  (1,2) conv3|conv4|conv5 -> fc6|fc7|fc8
+
+ScT_cumulative(rows=state, cols=block)
+1,0,0
+2,1,0
+2,1,0
+2,2,1
+2,2,2
+
+ScT_delta_per_state(rows=state, cols=block)
+1,0,0
+1,1,0
+0,0,0
+0,1,1
+0,0,1
+
+MeT_S(rows=state, cols=block)
+1,0,0
+2,1,0
+2,1,0
+2,2,1
+2,2,2
+
+MeT_D(rows=state, cols=block)
+0,0,0
+1,0,0
+1,0,0
+2,1,0
+2,1,0
+
+block_to_state_mapping
+  conv1|pool1|conv2: S0:+1 S1:+1
+  conv3|conv4|conv5: S1:+1 S3:+1
+  fc6|fc7|fc8: S3:+1 S4:+1
+
+layer_to_state_mapping
+  conv1: S0:+1 S1:+1
+  pool1: S0:+1 S1:+1
+  conv2: S0:+1 S1:+1
+  conv3: S1:+1 S3:+1
+  conv4: S1:+1 S3:+1
+  conv5: S1:+1 S3:+1
+  fc6: S3:+1 S4:+1
+  fc7: S3:+1 S4:+1
+  fc8: S3:+1 S4:+1
