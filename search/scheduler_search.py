@@ -29,6 +29,10 @@ class SearchConfig:
     noc_bandwidth: float = 4096.0
     dram_energy_per_unit: float = 0.0075
 
+    # Compute-side hardware model parameters (default: normalized).
+    compute_power_per_tile: float = 1.0
+    compute_energy_per_op: float = 1e-12
+
     # Optional balancing constraints for state allocation.
     min_active_states: int = 1
     min_batch_if_active: int = 1
@@ -303,6 +307,8 @@ def search_schedule(
                 max_batches_per_state=caps,
                 use_edp_objective=config.use_edp_objective,
                 dependency_gap=config.dependency_gap,
+                compute_power_per_tile=config.compute_power_per_tile,
+                energy_per_op=config.compute_energy_per_op,
                 allow_fallback=config.allow_solver_fallback,
             )
         except Exception:
@@ -394,3 +400,7 @@ def search_schedule(
         active_pes=active_pes,
         state_active_blocks=state_active_blocks,
     )
+
+
+
+

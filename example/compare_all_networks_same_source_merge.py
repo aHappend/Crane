@@ -16,6 +16,7 @@ from model.layer import Layer
 from scheduler.block import Block
 from search.scheduler_search import SearchConfig, search_schedule
 from example.run_official_nns_suite import official_specs
+from scheduler.hardware_profile import paper_7_2_search_params
 
 
 # Stage layouts from outputs/visualization/official_nns_structure.html
@@ -156,12 +157,24 @@ def _build_stage_blocks_from_min_layers(min_layer_blocks: list[Block], layout: l
     return out
 
 
-def _cfg(batch_size: int, num_pes: int, max_layers_per_block: int) -> SearchConfig:
+def _cfg(batch_size: int, num_pes: int, max_layers_per_block: int, use_paper_hw_7_2: bool) -> SearchConfig:
+    if use_paper_hw_7_2:
+        hw = paper_7_2_search_params(num_pes=num_pes)
+    else:
+        hw = {
+            "sram_capacity": 15000.0,
+            "dram_capacity": 30000.0,
+            "noc_bandwidth": 4096.0,
+            "dram_energy_per_unit": 0.0075,
+            "compute_power_per_tile": 1.0,
+            "compute_energy_per_op": 1e-12,
+        }
+
     return SearchConfig(
         batch_size=batch_size,
         candidate_sub_batches=_candidate_sub_batches(batch_size),
-        sram_capacity=15000.0,
-        dram_capacity=30000.0,
+        sram_capacity=float(hw["sram_capacity"]),
+        dram_capacity=float(hw["dram_capacity"]),
         num_pes=num_pes,
         enable_chain_block_merge=True,
         max_layers_per_block=max_layers_per_block,
@@ -174,11 +187,15 @@ def _cfg(batch_size: int, num_pes: int, max_layers_per_block: int) -> SearchConf
         top_k2=2,
         use_edp_objective=True,
         dependency_gap=0,
+        noc_bandwidth=float(hw["noc_bandwidth"]),
+        dram_energy_per_unit=float(hw["dram_energy_per_unit"]),
+        compute_power_per_tile=float(hw["compute_power_per_tile"]),
+        compute_energy_per_op=float(hw["compute_energy_per_op"]),
         allow_solver_fallback=False,
     )
 
 
-def _worker_run(queue: mp.Queue, network: str, mode: str, spec: dict, num_pes: int, max_layers_per_block: int) -> None:
+def _worker_run(queue: mp.Queue, network: str, mode: str, spec: dict, num_pes: int, max_layers_per_block: int, use_paper_hw_7_2: bool) -> None:
     try:
         layout = _layout_for_network(network)
         min_blocks = _build_min_layers(spec["layers"], layout)
@@ -189,7 +206,7 @@ def _worker_run(queue: mp.Queue, network: str, mode: str, spec: dict, num_pes: i
         else:
             raise ValueError(f"unknown mode={mode}")
 
-        cfg = _cfg(batch_size=int(spec["batch_size"]), num_pes=num_pes, max_layers_per_block=max_layers_per_block)
+        cfg = _cfg(batch_size=int(spec["batch_size"]), num_pes=num_pes, max_layers_per_block=max_layers_per_block, use_paper_hw_7_2=use_paper_hw_7_2)
         res = search_schedule(blocks, cfg)
 
         queue.put(
@@ -239,7 +256,7 @@ def _run_one_with_timeout(
     timeout_sec: int,
 ) -> RunOutcome:
     q: mp.Queue = mp.Queue()
-    p = mp.Process(target=_worker_run, args=(q, network, mode, spec, num_pes, max_layers_per_block))
+    p = mp.Process(target=_worker_run, args=(q, network, mode, spec, num_pes, max_layers_per_block, use_paper_hw_7_2))
     p.start()
     p.join(timeout=timeout_sec)
 
@@ -346,11 +363,13 @@ def main() -> None:
     parser.add_argument("--num-pes", type=int, default=16)
     parser.add_argument("--timeout-sec", type=int, default=120)
     parser.add_argument("--max-layers-per-block", type=int, default=32)
+    parser.add_argument("--paper-hw-7-2", action="store_true", help="use paper Section 7.2 hardware parameters")
     args = parser.parse_args()
 
     num_pes = int(args.num_pes)
     timeout_sec = max(10, int(args.timeout_sec))
     max_layers_per_block = max(2, int(args.max_layers_per_block))
+    use_paper_hw_7_2 = bool(args.paper_hw_7_2)
 
     specs = official_specs()
 
@@ -374,6 +393,7 @@ def main() -> None:
                 num_pes=num_pes,
                 max_layers_per_block=max_layers_per_block,
                 timeout_sec=timeout_sec,
+                use_paper_hw_7_2=use_paper_hw_7_2,
             )
         )
         outcomes.append(
@@ -387,6 +407,7 @@ def main() -> None:
                 num_pes=num_pes,
                 max_layers_per_block=max_layers_per_block,
                 timeout_sec=timeout_sec,
+                use_paper_hw_7_2=use_paper_hw_7_2,
             )
         )
 
@@ -523,3 +544,10 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+

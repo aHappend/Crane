@@ -1,0 +1,112 @@
+Crane: Inter-Layer Scheduling Framework for DNN Inference and Training Co-Support on Tiled Architecture MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea
+00.51
+PipelineSequentialFlexible SchemePipelineSequentialFlexible SchemeResNet50Transformer-large
+NormalizedPerformance
+LatencyEnergy ConsumptionEDP
+Figure 14: When exploring execution scheme is enabled, Crane iden-
+tifies better scheduling solution with reduced latency, energy and
+EDP. Model inference on cloud architecture with batch size 64.
+01000020000300004000050000Time(cycles)12435
+1615
+67891012111314Tiles
+01000020000300004000050000Time(cycles)12435
+1615
+67891012111314Tiles
+(a) Execution Graph of SET(b) Execution Graph of Crane
+Figure 15: Tile-Time schedule for Inception inference (Crane vs SET).
+Impact of Recomputation (R). Fig. 13 shows that enabling
+recomputation in Crane reduces DRAM capacity requirements by
+2.2× on average, with only a modest 0.125× increase in data access
+overhead. This demonstrates the value of integrating recomputation
+strategies into the scheduling framework for training efficiency.
+Impact of Execution Scheme (E). Fig. 14 highlights the im-
+portance of exploring execution schemes. With this exploration
+enabled, Crane achieves average reductions of 2.6× in latency, 1.8×
+in energy, and 4.7× in EDP compared to the case turning off ex-
+ecution scheme search. These gains stem from mitigating data
+reloading overheads in sequential scheduling and reducing pipeline
+bubbles in fully pipelined execution.
+Finer-Grained Sub-batch Optimization Analysis. We use
+an inference example of Inception-ResNet-V1 model on edge-sided
+accelerator with 𝐵𝑆 = 2 and 𝐵𝑆𝑠𝑢𝑏 = 1 to demonstrate how the
+scheduling derived from our framework eliminates bubble overhead,
+as shown in Fig. 15. Each colored block represents a layer, with the
+horizontal axis representing the execution time and the vertical
+axis indicating the allocated tiles for that layer. Unlike SET, which
+restricts the search space to coarse-grained sub-batch scheduling,
+Crane expands the space to support flexible mappings across sub-
+batches of different layers. This broader exploration enables higher
+hardware performance through finer-grained scheduling.
+Runtime Analysis. The end-to-end runtime of all frameworks
+is evaluated on an AMD EPYC 7402P CPU. Compared to SET and
+Tangram, Crane achieves 2.82× and 156.20× speedup, respectively.
+This substantial gain—despite Crane’s larger search space—is en-
+abled by three key factors: (1) For a given 𝐵sub, each block’s opti-
+mization is formulated as an MILP problem solvable by efficient
+solvers; (2) The hierarchical search space is effectively pruned by
+(a) restricting sub-batch exploration to Top-𝐾1, 𝐾2 candidates based
+on 𝐶𝑜𝑠𝑡 comp and 𝐶𝑜𝑠𝑡 traffic, and (b) applying cost-driven block re-
+finement to avoid enumerating poor nested structures; (3) The de-
+terministic, hierarchical refinement process—alternating between
+00.20.40.60.811.2
+0510152025
+4681012
+Normalized Runtime
+Cost (ms x mJ)CostRuntime 00.20.40.60.811.2
+051015202530
+05101520
+Normalized Runtime per Iteration
+Cost(ms x mJ)CostRuntime
+𝜽(Percentage of Previous Cost ) 𝑲𝟐(a) Sensitivity of 𝜽 (b) Sensitivity of 𝑲𝟐
+Figure 16: Runtime and EDP cost analysis of 𝜃 and 𝐾2. Increasing 𝜃
+and decreasing 𝐾2 reduce runtime but raise cost.
+high-level and lower-level blocks—achieves fast convergence, un-
+like the slower, randomized simulated annealing used in SET.
+Sensitivity Analysis. The parameters 𝐾1–𝐾4 and 𝜃 affect run-
+time and scheduling quality: 𝐾1–𝐾4 control the number of sub-
+batch candidates retained per iteration (impacting per-step run-
+time), while 𝜃 sets the total number of iterations. Fig. 16 shows for
+VGG inference on an edge platform, increasing these values im-
+proves scheduling but increases runtime. Notably, the same 𝐾1–𝐾4
+and 𝜃 are used across all experiments in Section 7.2 and 7.3.
+8 Conclusion
+We present Crane, a unified inter-layer scheduling framework for
+tiled architectures that supports both inference and training. By
+leveraging a hierarchical table-format representation, Crane cap-
+tures essential design factors, enables flexible scheduling, and trans-
+forms scheduling into a structured optimization problem. Experi-
+mental results show substantial gains over existing works.
+Acknowledgments
+This work was supported in part by the National Science Foundation
+under Grants CCF-2529764, CCF-2425399 and CCF-2529763, and
+by a Hans Fischer Senior Fellowship at the Technical University of
+Munich.
+References
+[1] [n. d.]. ARM Downloads Beta - Artisan . https://developer.arm.com/downloads-
+beta/search?term=artisan
+[2] Manoj Alwani, Han Chen, Michael Ferdman, and Peter Milder. 2016. Fused-Layer
+CNN Accelerators. In 2016 49th Annual IEEE/ACM International Symposium on
+Microarchitecture (MICRO). IEEE, 1–12.
+[3] Chen Bai, Xuechao Wei, Youwei Zhuo, Yi Cai, Hongzhong Zheng, Bei Yu, and
+Yuan Xie. 2024. Klotski v2: Improved DNN Model Orchestration Framework for
+Dataflow Architecture Accelerators. IEEE Transactions on Computer-Aided Design
+of Integrated Circuits and Systems (2024).
+[4] Olivier Beaumont, Lionel Eyraud-Dubois, and Alena Shilova. 2021. Efficient
+Combination of Rematerialization and Offloading for Training DNNs. Advances
+in Neural Information Processing Systems 34 (2021), 23844–23857.
+[5] Jingwei Cai, Yuchen Wei, Zuotong Wu, Sen Peng, and Kaisheng Ma. 2023. Inter-
+Layer Scheduling Space Definition and Exploration for Tiled Accelerators. In
+Proceedings of the 50th Annual International Symposium on Computer Architecture .
+1–17.
+[6] Hongzheng Chen, Cody Hao Yu, Shuai Zheng, Zhen Zhang, Zhiru Zhang, and
+Yida Wang. 2024. Slapo: A Schedule Language for Progressive Optimization of
+Large Deep Learning Model Training. InProceedings of the 29th ACM International
+Conference on Architectural Support for Programming Languages and Operating
+Systems, Volume 2. 1095–1111.
+[7] Yonggan Fu, Yongan Zhang, Yang Zhang, David Cox, and Yingyan Lin. 2021.
+Auto-NBA: Efficient and Effective Search over the Joint Space of Networks,
+Bitwidths, and Accelerators. In International Conference on Machine Learning .
+PMLR, 3505–3517.
+[8] Mingyu Gao, Jing Pu, Xuan Yang, Mark Horowitz, and Christos Kozyrakis. 2017.
+TETRIS: Scalable and Efficient Neural Network Acceleration with 3D Memory.
+1262

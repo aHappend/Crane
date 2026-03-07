@@ -1,0 +1,143 @@
+MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea Yu Gong, Lingyi Huang, Haodong Chang, Rongjian Liang, Cheng Yang, Zhexiang Tang, Jiang Hu, and Bo Yuan
+possible 𝐵𝑆sub, the corresponding ScT is built with the constraints
+described by Eq. 1 - 6. Since all constraints are linear, we can ap-
+ply piecewise linear approximation and solve the problem using
+an MILP solver to find the corresponding 𝑠𝑖’s that minimize the
+computation-related EDP, a bilinear term that can be linearized via
+McCormick envelope [25]:
+{𝑠𝑖 }opt = arg min
+{𝑠𝑖 }
+𝐿𝑝
+comp × 𝐸𝑞
+comp, (22)
+where 𝑝 and 𝑞 are hyper-parameters setting the importance of
+latency and energy, respectively. With the above-identified 𝑠𝑖’s, we
+can specify ScT’s and further calculate the corresponding mini-
+mized EDP cost for each 𝐵sub candidate. After preserving 𝐾1 pos-
+sible 𝐵sub’s with the smallest𝐾1 𝐿𝑝
+comp × 𝐸𝑞
+comp’s, we further use
+them and the corresponding 𝑠𝑖’s to build𝐾1 MeT’s. Again, an MILP
+solver is applied to minimize the data traffic-related EDP cost:
+{MeT𝐷
+𝑖,𝑗 , MeT𝑆
+𝑖,𝑗 }opt = arg min
+{MeT𝐷
+𝑖,𝑗 ,MeT𝑆
+𝑖,𝑗 }
+𝐿𝑝
+traffic × 𝐸𝑞
+traffic. (23)
+The candidate list for 𝐵sub is then further shrunk by preserving
+only 𝐾2 𝐵sub’s that correspond to the smallest𝐿𝑝
+traffic×𝐸𝑞
+traffic’s. Note
+that for the training workload, another round of table construction
+and 𝐵sub candidate reduction are needed.
+Finally, intra-layer scheduling is applied to the remaining 𝐾2
+candidates to update total latency and energy consumption after
+considering the optimization within each hardware tile as follows:
+𝐿Total = max
+ ∑︁
+𝑖
+𝑠𝑖 × max
+𝑗
+ 𝐿comp,𝑖,𝑗 𝛼𝑖,𝑗
+ , 𝐿traffic +
+∑︁
+𝑖,𝑗
+𝛽𝑖,𝑗
+!
+, (24)
+𝐸Total = 𝐸comp, unit ×
+∑︁
+𝑖,𝑗
+𝑠𝑖Workload𝑗 𝛼𝑖,𝑗
+𝑢𝑖,𝑗
++ 𝐸traffic +
+∑︁
+𝑖,𝑗
+𝛾𝑖,𝑗 , (25)
+where 𝛼𝑖,𝑗 is the factor considering the actual hardware utiliza-
+tion for processing sub-block 𝐵 𝑗 in State-𝑖. 𝛽𝑖,𝑗 and 𝛾𝑖,𝑗 are the
+corresponding data traffic-related latency and energy consumption
+associated with intra-layer scheduling. Here, 𝛼𝑖,𝑗 , 𝛽𝑖,𝑗 , and 𝛾𝑖,𝑗 are
+obtained from the intra-layer scheduler. Thanks to the abstraction
+of hardware tiles in inter-layer scheduling, the existing intra-layer
+schedulers can be easily applied to our framework as a plug-in.
+Remark 3 (Addressing Challenge #1: Unified Representation
+of Core Scheduling Factors ). The ScT and MeT table formats,
+together with sub-batch size selection (𝐵𝑆sub), provide a unified and
+extensible representation of inter-layer scheduling behavior. These
+tables explicitly record execution states and memory status, which
+are determined by four design factors (E,P,R,B). This joint represen-
+tation ensures that all key design factors are consistently captured
+within a single framework—directly addressing Challenge #1.
+Remark 4 (Addressing Challenge #3: Structured and Exhaus-
+tive Scheduling via MILP ). The table-based formulation using
+ScT and MeT naturally leads to an MILP, which encodes scheduling
+constraints with high structural regularity. This enables exhaustive
+exploration of the scheduling space using off-the-shelf MILP solvers,
+offering both fast convergence and globally optimal solutions for
+intra-block scheduling—effectively addressing Challenge #3.
+6 Hierarchical Structure Optimization
+After optimizing intra-block scheduling, the next step is to optimize
+hierarchical block structure. This involves refining the arrangement
+and organization of blocks to improve the overall scheduling effi-
+ciency. To that end, we propose an iterative two-step solution:
+Step-1: Graph Partition. In this step, the DNN model is parti-
+tioned based on the dependency relationships between layers in its
+computational graph. Specifically, layers are grouped into blocks
+by examining these dependencies. If layers form a sequential de-
+pendency chain, where each layer directly depends on the previous
+one and only outputs its result to the next, they are combined into
+a single block. For example, Layer-2 in Fig. 8 solely depends on
+Layer-1, and Layer-3 solely depends on Layer-2, so Layers-2 and
+-3 are grouped into Block-B. When a layer or block has multiple
+dependencies or outputs its results to multiple layers or blocks, a
+higher-level block is formed to capture these relationships. Addi-
+tionally, each layer can also function as a single block, enabling
+flexible sub-batch size optimization. Following these principles,
+Block-A and Block-C are constructed to contain Layer-1 and Layer-
+4, respectively, while Block-D is formed by consolidating Block-A,
+B, and C, thus capturing all inter-block dependencies.
+Step-2: Gradual Partition. This step optimizes overall schedul-
+ing scheme by incrementally updating and optimizing lower-level
+blocks. Initially, the workload of each partitioned block is set as the
+corresponding FLOP counts, without considering tile utilization.
+Similarly, the initialization of data traffic for each block does not
+account for impact of potential optimization in lower-level blocks.
+The optimization process begins with top-level block, for example,
+Block-D in Fig. 8. From the perspective of Block-D, lower-level
+blocks (Block-A, B, and C) serve as component layers. We optimize
+the inter-layer scheduling for Block-D using the process illustrated
+in Fig. 7, where the cost evaluation is based on the FLOPs and data
+traffic information of component blocks. After finishing the sched-
+ule optimization for Block-D, the newly obtained optimal cost is
+compared with the initial cost (initially set to zero). If the difference
+exceeds a pre-set threshold 𝜃, the scheduling for Block-A, B, and C
+will be re-optimized. For each lower-level block, the batch size, allo-
+cated hardware tiles, and available SRAM capacity may be updated
+after optimizing the top-level block. These updated parameters are
+then used in the schedule optimization for the lower-level block.
+As shown in Fig. 8, cost-driven block partitioning process is
+used to identify optimal block structure for each lower-level block.
+Consider Block-B as an example. Since it consists of two layers,
+two possible scenarios are evaluated: (1) Layer-2 and Layer-3 are
+treated as separate blocks without forming a higher-level block, (2)
+they form a hierarchical nested block. After optimizing for both
+cases, block structure with lower cost is selected as optimal struc-
+ture for these layers. This gradual partitioning is performed for all
+hierarchical nested block structures until reaching bottom level.
+Iterative Update. Once the optimization of lower-level blocks
+is complete, the workload and data traffic for each block are de-
+termined and passed back to the higher-level block. Based on this
+updated information, the scheduling for the higher-level block is
+re-optimized. This iterative procedure continues until a predefined
+convergence condition for the top-level block is met.
+7 Evaluation
+7.1 Validation of Cost Evaluator
+Crane is implemented in C++ for comprehensive scheduling ex-
+ploration. To validate its cost model, we compare it to SET, which
+reports less than 3% deviation from cycle-accurate simulations of
+1259

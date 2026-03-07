@@ -1,0 +1,114 @@
+Crane: Inter-Layer Scheduling Framework for DNN Inference and Training Co-Support on Tiled Architecture MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea
+zz
+1234
+ABCD1234
+Schedule Optimization of Block-D
+Step-1Graph Partition
+WorkloadA, TrafficAWorkloadB, TrafficBWorkloadC, TrafficC
+Block-ABlock-C
+YesCostNew− CostPrev< 𝜽
+Block-B
+23B2ESchedule Optimization of Block-EFSchedule Optimization of Block-F2GH3BSchedule Optimization of Block B
+23
+State
+Tiles2233Lower Cost
+WorkloadBTrafficB
+NoWorkload & Traffic Iterative UpdateLower Block Opt.3
+Step-2Gradual PartitionTiles
+1369
+ABC
+D
+StateScheduling of Nested Blocks
+Output
+Figure 8: Exploration and optimization process using nested block-based representation. The schedule optimization module refers to Fig. 7.
+multi-tile compute and memory access behavior using zsim [ 30]
+and DRAMSim2 [29]. Both Crane and SET employ brute-force intra-
+layer scheduling. During validation, individual inter-layer schedul-
+ing is disabled and replaced with a common manually configured
+scheme, and hardware settings match those of SET. We evaluate var-
+ious DNN models (VGG, ResNet-50, Transformer-Large, Inception-
+V3) across different batch sizes. Results show Crane achieves 1%
+deviation from SET and 4% transitive deviation from cycle-accurate
+simulation baselines, confirming high fidelity of our cost model.
+7.2 Evaluation on Inference
+Baseline. We compare our approach with Tangram and SET by
+enabling their respective inter-layer scheduling processes. Unlike
+Crane, which supports both inference and training, these frame-
+works are designed for inference. To ensure a fair comparison, we
+disable Crane’s exploration and optimization for recomputation
+and the backward pass, focusing only on inference performance.
+Hardware Configuration. For fair comparison, we follow SET
+by adopting the NVDLA-style architecture as the hardware tile for
+both 16-tile edge-side and 144-tile cloud-side platforms, operated
+at 1GHz clock frequency with TSMC 12nm process. Each tile is
+equipped with 𝑃 = 1024 int8 MACs and a 1 MB SRAM. The energy
+consumption for each MAC operation is 𝐸𝑐𝑜𝑚𝑝,𝑢𝑛𝑖𝑡 = 0.018 pJ/op.
+We adopt a meshed NoC to connect the tiles, with a bandwidth of
+𝐵𝑊𝑁 𝑜𝐶 = 24 GB/s, and the unit energy consumption for each hop
+is 𝐸𝑁 𝑜𝐶,𝑢𝑛𝑖𝑡 = 0.7 pJ/bit. Following SET, the DRAM bandwidth is
+set as 𝐵𝑊𝐷 = 0.5 GB/TOPs (i.e., 16 GB/s, 144 GB/s for edge-side and
+cloud-side architecture, respectively), and the corresponding unit
+energy consumption is 𝐸𝐷𝑅𝐴𝑀,𝑢𝑛𝑖𝑡 = 7.5 pJ/bit. DRAM capacity
+is not constrained here since inference is not sensitive to it. The
+energy consumption for various register, buffer and SRAM sizes
+associated with the intra-layer exploration is obtained via ARM
+Memory Compiler [ 1]. To explore the search space, we set the
+hyperparameter in our framework as 𝐾1 = ⌈0.5 × 𝑁𝐶𝑎𝑛𝑑𝑖𝑑𝑎𝑡𝑒 ⌉,
+and 𝐾2 = ⌈0.2 × 𝑁𝐶𝑎𝑛𝑑𝑖𝑑𝑎𝑡𝑒 ⌉, where 𝑁𝐶𝑎𝑛𝑑𝑖𝑑𝑎𝑡𝑒 is the candidate
+amount of the𝐵𝑆𝑢𝑏 . 𝜃 is configured as2%×𝐶𝑜𝑠𝑡 𝑃𝑟𝑒𝑣 . The parameters
+𝑝 = 1, 𝑞 = 1 are specified in the cost function.
+Workloads & Performance. We benchmark ResNet-50 and
+GoogleNet on ImageNet, as well as Transformer-Large (12 layers,
+16 heads, sequence length 512, hidden dimension 1024), GPT-2 (16
+layers, 16 heads, sequence length 1024, hidden dimension 1024), and
+OPT-6.7B (32 layers, 32 heads, sequence length 2048, hidden dimen-
+sion 4096) with various batch sizes (𝐵𝑆). These models are evaluated
+as workloads on both edge and cloud-side platforms. Fig. 9 shows
+the latency and energy performance achieved by the optimal sched-
+uling strategies from schedulers. It is seen that Crane substantially
+outperforms Tangram and SET. Compared with Tangram, Crane
+reduces latency by 1.70× – 3.30×, cuts energy consumption by
+0.84× – 1.49×, and lowers EDP by 1.87× – 4.20×. In comparison to
+SET, Crane achieves latency reductions of1.12× – 3.02× (averaging
+1.64×), decreases energy consumption by 1.01× – 1.38× (averaging
+1.21×), and reduces EDP by 1.13× – 4.17× (averaging 1.84×).
+Comparison with TileFlow. We also evaluate the performance
+of Crane against TileFlow on a 4 × 4 tiled architecture with a batch
+size of 64. Fig. 10 shows Crane outperforms TileFlow significantly:
+for ResNet-50, it achieves 28% lower latency, 39% lower energy
+consumption, and a 56% reduction in EDP. For BERT-Base, the
+corresponding reductions are 13%, 17%, and 28%, respectively.
+7.3 Evaluation on Training
+Baseline. To evaluate training performance of Crane, we com-
+pare its results with those of MBS [23], an inter-layer scheduling
+method specialized for DNN training. MBS employs batch-splitting
+and layer fusion strategies to optimize data traffic and accelerate
+training on tiled accelerators. Additionally, since SET and Tangram
+are specifically designed for inference and its source code does
+not support training workloads, and in particular, it lacks support
+for recomputation, we estimate the potential performance of a
+hypothetical training-oriented SET and Tangram by applying the
+scheduling optimization from inference-only scheduling separately
+to forward and backward passes. The total estimated cost is then
+obtained by summing the resulting latency and energy metrics.
+Hardware Configuration. For fair comparison, we follow the
+settings of MBS and configure the target computing platform with
+two tiled systolic array. Each hardware tile features a MAC array
+size of 𝑃 = 16384 (128 × 128) and 10 MB of SRAM. For high-
+bandwidth data movement, the on-chip NoC bandwidth (𝐵𝑊𝑁 𝑜𝐶)
+is set to 100 GB/s, with energy consumption of 𝐸𝑁 𝑜𝐶,𝑢𝑛𝑖𝑡 = 0.7
+pJ/bit. Additionally, a 32 GB HBM2 off-chip memory provides a
+bandwidth of 𝐵𝑊𝐷 = 300 GB/s, consuming 𝐸𝐷𝑅𝐴𝑀,𝑢𝑛𝑖𝑡 = 3.9 pJ/bit
+[27]. Our evaluation follows the intra-layer computation scheme
+proposed in MBS. The search hyper-parameters are configured
+as 𝐾3 = ⌈0.1 × 𝑁𝐶𝑎𝑛𝑑𝑖𝑑𝑎𝑡𝑒 ⌉ and 𝐾4 = ⌈0.05 × 𝑁𝐶𝑎𝑛𝑑𝑖𝑑𝑎𝑡𝑒 ⌉, while
+other parameters adhere to the configurations in Section 7.2. For
+the comparison with the hypothetical training-oriented SET, the
+cloud-side architecture is utilized and the configurations remain
+the same except DRAM size is set as 128 GB for training procedure.
+Workloads & Performance. For the training evaluations with
+MSB, we select the ResNet-50, ResNet-101, Inception-V3, and Inception-
+V4 models. These models are trained on the ImageNet dataset using
+a batch size of 256. As illustrated in Fig. 11, the scheduling gener-
+ated by our framework outperforms MBS’s solution with respect to
+1260

@@ -123,6 +123,8 @@ def _solve_with_ortools(
     max_batches_per_state: Sequence[int] | None,
     use_edp_objective: bool,
     dependency_gap: int,
+    compute_power_per_tile: float,
+    energy_per_op: float,
 ) -> ScTOptimizationResult:
     del block_outputs  # not used in ScT compute-side MILP.
 
@@ -214,8 +216,8 @@ def _solve_with_ortools(
         block_flops=block_flops,
         num_states=num_states,
         num_pes=num_pes,
-        compute_power_per_tile=1.0,
-        energy_per_op=1e-12,
+        compute_power_per_tile=compute_power_per_tile,
+        energy_per_op=energy_per_op,
     )
 
     latency_expr = solver.Sum(w[i] * float(lat_coeff[i]) for i in range(num_states))
@@ -273,6 +275,8 @@ def _solve_fallback(
     weight_energy: float,
     num_states: int | None,
     use_edp_objective: bool,
+    compute_power_per_tile: float,
+    energy_per_op: float,
 ) -> ScTOptimizationResult:
     del block_outputs
 
@@ -284,8 +288,8 @@ def _solve_fallback(
         block_flops=block_flops,
         num_states=num_states,
         num_pes=num_pes,
-        compute_power_per_tile=1.0,
-        energy_per_op=1e-12,
+        compute_power_per_tile=compute_power_per_tile,
+        energy_per_op=energy_per_op,
     )
     delta = np.zeros_like(sct.table)
     delta[0, :] = sct.table[0, :]
@@ -320,6 +324,8 @@ def optimize_sct_table(
     max_batches_per_state: Sequence[int] | None = None,
     use_edp_objective: bool = True,
     dependency_gap: int = 0,
+    compute_power_per_tile: float = 1.0,
+    energy_per_op: float = 1e-12,
     allow_fallback: bool = True,
 ) -> ScTOptimizationResult:
     if pywraplp is None:
@@ -334,6 +340,8 @@ def optimize_sct_table(
             weight_energy,
             num_states,
             use_edp_objective,
+            compute_power_per_tile,
+            energy_per_op,
         )
 
     try:
@@ -351,6 +359,8 @@ def optimize_sct_table(
             max_batches_per_state,
             use_edp_objective,
             dependency_gap,
+            compute_power_per_tile,
+            energy_per_op,
         )
     except Exception:
         if not allow_fallback:
@@ -364,4 +374,9 @@ def optimize_sct_table(
             weight_energy,
             num_states,
             use_edp_objective,
+            compute_power_per_tile,
+            energy_per_op,
         )
+
+
+

@@ -1,0 +1,91 @@
+MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea Yu Gong, Lingyi Huang, Haodong Chang, Rongjian Liang, Cheng Yang, Zhexiang Tang, Jiang Hu, and Bo Yuan
+00.511.522.53
+00.20.40.60.811.21.41.6
+TangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneNormalized Latency
+Normalzied Energy Consumption
+(a) Edge-Side ArchitectureResNet50GoogleNetB = 1B = 8B = 64Transformer-LargeB = 1B = 8B = 64B = 1B = 8B = 64B = 1B = 8B = 64B = 1B = 8B = 64GPT-2OPT-6.7B
+00.511.522.533.5
+00.20.40.60.811.21.41.6
+TangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneNormalized Latency
+Normalzied Energy Consumption
+(b) Cloud-Side ArchitectureResNet50GoogleNetB = 1B = 8B = 64Transformer-LargeB = 1B = 8B = 64B = 1B = 8B = 64B = 1B = 8B = 64B = 1B = 8B = 64GPT-2OPT-6.7B
+Figure 9: Performance of inter-layer schedulers for inference workloads. Compared with Tangram, Crane reduces energy-delay product (EDP)
+by 1.87× – 4.20× (averaging 3.03×) across all platforms, models, and batch sizes, and by 1.13× – 4.17× (averaging 1.84×) compared with SET. The
+average runtime speedup for scheduling achieved by Crane is 2.82× and 156.20× compared to SET and Tangram, respectively.
+00.51
+LatencyEnergyEDPLatencyEnergyEDPResNet50Bert-Base
+Normalized Performance
+TileFlowOurs
+Figure 10: Crane achieves 28%, 39%, and 56% reductions over TileFlow
+in latency, energy and EDP, respectively, on ResNet50. On Bert-Base,
+Crane delivers 13%, 17%, and 28% reductions in the same metrics.
+036912
+SETTangramSETTangramSETTangramSETTangramResNet50Transformer-largeGPT-2OPT-6.7B
+Normalized Reduction (Times)LatencyEnergy ConsumptionDRAM Traffic
+01234
+ResNet50ResNet101InceptionV3InceptionV4
+Normalized Reduction (Times)
+LatencyEnergy ConsumptionDRAM Traffic
+(a) Comparison with MBS
+(b) Comparison with hypothetical training-oriented SET and Tangram
+Out-of-memory error in SET and Tangram
+Figure 11: Performance of inter-layer schedulers for training work-
+load. (a) Crane outperforms MBS with 1.42× – 2.22× lower DRAM
+data traffic and 3.62× – 5.36× lower EDP. (b) Compared to training-
+oriented SET, Crane reduces DRAM traffic by 2.76×–2.97× and EDP
+by 11.01×–21.01×; against Tangram, the reductions are 4.81×–5.72×
+and 45.43×–64.73×, respectively. Notably, SET and Tangram fail to
+schedule OPT-6.7B due to out-of-memory, while Crane successfully
+generates a DRAM-feasible schedule.
+latency, energy consumption, DRAM data traffic, and total EDP cost
+per training step, achieving reduction of 1.64×, 2.54×, 1.67×, and
+4.18× on average across various models. These advancements are
+attributed to two primary factors: 1) MBS adopts a layer sequential
+processing pattern, whereas Crane applies a combination of three
+patterns for scheduling; and 2) MBS relies on a heuristic approach
+to determine batch splitting and layer fusion settings, while our
+framework optimizes all the four design factors of scheduling.
+To compare with hypothetical training-oriented SET and Tan-
+gram, we select ResNet-50 on ImageNet, Transformer-Large, GPT-2,
+and OPT-6.7B as models for training evaluation results. The batch
+size for training is 128. As shown in Fig. 11, Crane reduces latency by
+5.16×–6.96×, energy consumption by2.15×–3.04×, and DRAM traf-
+fic by 2.76×–2.97× over SET, achieving 11.01×–21.01× lower EDP.
+00.20.40.60.811.2
+32168421
+Normalized PerformanceSub-batch Size
+EnergyLatencyEDP
+Figure 12: Energy, latency, and EDP of ResNet-50 training under
+varying sub-batch sizes, with a fixed total batch size of 32. A sub-
+batch size of 32 (i.e., no batch splitting) results in much higher costs,
+highlighting the importance of effective batch splitting plan (B).
+00.511.5
+VGG16ResNet50Transformer-LargeInceptionV4VGG16ResNet50Transformer-LargeInceptionV4Memory Capacity RequirementData Access
+Normalized Performance
+Without RecomputationWith Recomputation
+DRAM Capacity RequirementDRAM Access
+Figure 13: With recomputation enabled, Crane largely reduces
+DRAM capacity requirement with minor overhead (Batch size= 64).
+Compared to Tangram, Crane reduces latency by 7.86×–10.26×,
+energy by 5.69×–6.41×, and DRAM traffic by 4.81×–5.72×, leading
+to 45.43×–64.73× EDP savings. Notably, the hypothetical training-
+oriented SET and Tangram cannot explore the inter-layer schedule
+for OPT-6.7B training due to an out-of-memory error. This occurs
+because the memory consumption for training this model exceeds
+DRAM capacity, while their searched schedule lacks the ability
+to explore recomputation opportunities that could reduce mem-
+ory usage. In contrast, Crane successfully generates an optimized
+schedule that enables training within the given DRAM budget.
+7.4 Ablation Study & Analysis
+Impact of Batch Splitting (B). As shown in Figure 12, using no
+batch splitting (i.e., a sub-batch size of 32) results in higher energy,
+latency, and EDP compared to configurations with smaller sub-
+batches, demonstrating the effectiveness of batch-level partitioning.
+Additionally, the results reveal a trade-off between computation
+and data movement overhead. Smaller sub-batches improve on-
+chip buffer utilization and allow more aggressive layer fusion, thus
+reducing memory access cost. However, they also lead to lower PE
+utilization and repeated loading of weight data, which increases
+computation overhead. Crane’s search process can systematically
+explore this trade-off to identify an optimal sub-batch configuration.
+1261
