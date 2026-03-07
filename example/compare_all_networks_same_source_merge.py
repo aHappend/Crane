@@ -88,6 +88,7 @@ class RunOutcome:
     edp: float
     sct_solver: str
     met_solver: str
+    hierarchy_note_count: int
     ok: bool
     status: str
     error: str
@@ -157,7 +158,16 @@ def _build_stage_blocks_from_min_layers(min_layer_blocks: list[Block], layout: l
     return out
 
 
-def _cfg(batch_size: int, num_pes: int, max_layers_per_block: int, use_paper_hw_7_2: bool) -> SearchConfig:
+def _cfg(
+    batch_size: int,
+    num_pes: int,
+    max_layers_per_block: int,
+    use_paper_hw_7_2: bool,
+    hierarchical: bool,
+    hierarchy_depth: int,
+    hierarchy_iters: int,
+    hierarchy_theta: float,
+) -> SearchConfig:
     if use_paper_hw_7_2:
         hw = paper_7_2_search_params(num_pes=num_pes)
     else:
@@ -199,10 +209,26 @@ def _cfg(batch_size: int, num_pes: int, max_layers_per_block: int, use_paper_hw_
         compute_power_per_tile=float(hw["compute_power_per_tile"]),
         compute_energy_per_op=float(hw["compute_energy_per_op"]),
         allow_solver_fallback=False,
+        enable_hierarchical_pipeline=hierarchical,
+        max_hierarchy_depth=max(1, int(hierarchy_depth)),
+        max_hierarchy_iters=max(1, int(hierarchy_iters)),
+        hierarchy_theta=max(0.0, float(hierarchy_theta)),
     )
 
 
-def _worker_run(queue: mp.Queue, network: str, mode: str, spec: dict, num_pes: int, max_layers_per_block: int, use_paper_hw_7_2: bool) -> None:
+def _worker_run(
+    queue: mp.Queue,
+    network: str,
+    mode: str,
+    spec: dict,
+    num_pes: int,
+    max_layers_per_block: int,
+    use_paper_hw_7_2: bool,
+    hierarchical: bool,
+    hierarchy_depth: int,
+    hierarchy_iters: int,
+    hierarchy_theta: float,
+) -> None:
     try:
         layout = _layout_for_network(network)
         min_blocks = _build_min_layers(spec["layers"], layout)
@@ -213,7 +239,16 @@ def _worker_run(queue: mp.Queue, network: str, mode: str, spec: dict, num_pes: i
         else:
             raise ValueError(f"unknown mode={mode}")
 
-        cfg = _cfg(batch_size=int(spec["batch_size"]), num_pes=num_pes, max_layers_per_block=max_layers_per_block, use_paper_hw_7_2=use_paper_hw_7_2)
+        cfg = _cfg(
+            batch_size=int(spec["batch_size"]),
+            num_pes=num_pes,
+            max_layers_per_block=max_layers_per_block,
+            use_paper_hw_7_2=use_paper_hw_7_2,
+            hierarchical=hierarchical,
+            hierarchy_depth=hierarchy_depth,
+            hierarchy_iters=hierarchy_iters,
+            hierarchy_theta=hierarchy_theta,
+        )
         res = search_schedule(blocks, cfg)
 
         queue.put(
@@ -230,6 +265,7 @@ def _worker_run(queue: mp.Queue, network: str, mode: str, spec: dict, num_pes: i
                 "edp": res.total_edp,
                 "sct_solver": res.sct_solver_name,
                 "met_solver": res.met_solver_name,
+                "hierarchy_note_count": len(res.hierarchy_notes),
             }
         )
     except Exception as exc:
@@ -247,6 +283,7 @@ def _worker_run(queue: mp.Queue, network: str, mode: str, spec: dict, num_pes: i
                 "edp": 0.0,
                 "sct_solver": "",
                 "met_solver": "",
+                "hierarchy_note_count": 0,
             }
         )
 
@@ -262,11 +299,27 @@ def _run_one_with_timeout(
     max_layers_per_block: int,
     timeout_sec: int,
     use_paper_hw_7_2: bool,
+    hierarchical: bool,
+    hierarchy_depth: int,
+    hierarchy_iters: int,
+    hierarchy_theta: float,
 ) -> RunOutcome:
     q: mp.Queue = mp.Queue()
     p = mp.Process(
         target=_worker_run,
-        args=(q, network, mode, spec, num_pes, max_layers_per_block, use_paper_hw_7_2),
+        args=(
+            q,
+            network,
+            mode,
+            spec,
+            num_pes,
+            max_layers_per_block,
+            use_paper_hw_7_2,
+            hierarchical,
+            hierarchy_depth,
+            hierarchy_iters,
+            hierarchy_theta,
+        ),
     )
     p.start()
     p.join(timeout=timeout_sec)
@@ -282,7 +335,11 @@ def _run_one_with_timeout(
             f.write(f"batch_size={batch_size}\n")
             f.write(f"num_pes={num_pes}\n")
             f.write(f"max_layers_per_block={max_layers_per_block}\n")
-            f.write(f"status=timeout\n")
+            f.write(f"hierarchical={hierarchical}\n")
+            f.write(f"hierarchy_depth={hierarchy_depth}\n")
+            f.write(f"hierarchy_iters={hierarchy_iters}\n")
+            f.write(f"hierarchy_theta={hierarchy_theta}\n")
+            f.write("status=timeout\n")
             f.write(f"timeout_sec={timeout_sec}\n")
 
         return RunOutcome(
@@ -299,6 +356,7 @@ def _run_one_with_timeout(
             edp=0.0,
             sct_solver="",
             met_solver="",
+            hierarchy_note_count=0,
             ok=False,
             status="timeout",
             error=f"timeout after {timeout_sec}s",
@@ -319,6 +377,7 @@ def _run_one_with_timeout(
             edp=0.0,
             sct_solver="",
             met_solver="",
+            hierarchy_note_count=0,
             ok=False,
             status="error",
             error="worker exited without result",
@@ -333,6 +392,10 @@ def _run_one_with_timeout(
         f.write(f"batch_size={batch_size}\n")
         f.write(f"num_pes={num_pes}\n")
         f.write(f"max_layers_per_block={max_layers_per_block}\n")
+        f.write(f"hierarchical={hierarchical}\n")
+        f.write(f"hierarchy_depth={hierarchy_depth}\n")
+        f.write(f"hierarchy_iters={hierarchy_iters}\n")
+        f.write(f"hierarchy_theta={hierarchy_theta}\n")
         f.write(f"status={data['status']}\n")
         if data["ok"]:
             f.write(f"input_blocks={data['input_blocks']}\n")
@@ -341,6 +404,7 @@ def _run_one_with_timeout(
             f.write(f"best_sub_batch={data['best_sub_batch']}\n")
             f.write(f"sct_solver={data['sct_solver']}\n")
             f.write(f"met_solver={data['met_solver']}\n")
+            f.write(f"hierarchy_note_count={data['hierarchy_note_count']}\n")
             f.write(f"latency={data['latency']:.6f}\n")
             f.write(f"energy={data['energy']:.6f}\n")
             f.write(f"edp={data['edp']:.6f}\n")
@@ -361,6 +425,7 @@ def _run_one_with_timeout(
         edp=float(data["edp"]),
         sct_solver=str(data["sct_solver"]),
         met_solver=str(data["met_solver"]),
+        hierarchy_note_count=int(data["hierarchy_note_count"]),
         ok=bool(data["ok"]),
         status=str(data["status"]),
         error=str(data["error"]),
@@ -375,12 +440,20 @@ def main() -> None:
     parser.add_argument("--timeout-sec", type=int, default=120)
     parser.add_argument("--max-layers-per-block", type=int, default=32)
     parser.add_argument("--paper-hw-7-2", action="store_true", help="use paper Section 7.2 hardware parameters")
+    parser.add_argument("--hierarchical", action="store_true", help="enable hierarchical block-inside and block-between pipeline search")
+    parser.add_argument("--hier-depth", type=int, default=2)
+    parser.add_argument("--hier-iters", type=int, default=3)
+    parser.add_argument("--hier-theta", type=float, default=0.02)
     args = parser.parse_args()
 
     num_pes = int(args.num_pes)
     timeout_sec = max(10, int(args.timeout_sec))
     max_layers_per_block = max(2, int(args.max_layers_per_block))
     use_paper_hw_7_2 = bool(args.paper_hw_7_2)
+    hierarchical = bool(args.hierarchical)
+    hierarchy_depth = int(args.hier_depth)
+    hierarchy_iters = int(args.hier_iters)
+    hierarchy_theta = float(args.hier_theta)
 
     specs = official_specs()
 
@@ -405,6 +478,10 @@ def main() -> None:
                 max_layers_per_block=max_layers_per_block,
                 timeout_sec=timeout_sec,
                 use_paper_hw_7_2=use_paper_hw_7_2,
+                hierarchical=hierarchical,
+                hierarchy_depth=hierarchy_depth,
+                hierarchy_iters=hierarchy_iters,
+                hierarchy_theta=hierarchy_theta,
             )
         )
         outcomes.append(
@@ -419,6 +496,10 @@ def main() -> None:
                 max_layers_per_block=max_layers_per_block,
                 timeout_sec=timeout_sec,
                 use_paper_hw_7_2=use_paper_hw_7_2,
+                hierarchical=hierarchical,
+                hierarchy_depth=hierarchy_depth,
+                hierarchy_iters=hierarchy_iters,
+                hierarchy_theta=hierarchy_theta,
             )
         )
 
@@ -434,6 +515,10 @@ def main() -> None:
             "num_pes",
             "timeout_sec",
             "max_layers_per_block",
+            "hierarchical",
+            "hierarchy_depth",
+            "hierarchy_iters",
+            "hierarchy_theta",
             "input_blocks",
             "scheduled_blocks",
             "num_states",
@@ -443,6 +528,7 @@ def main() -> None:
             "edp",
             "sct_solver",
             "met_solver",
+            "hierarchy_note_count",
             "ok",
             "status",
             "error",
@@ -459,6 +545,10 @@ def main() -> None:
                     "num_pes": num_pes,
                     "timeout_sec": timeout_sec,
                     "max_layers_per_block": max_layers_per_block,
+                    "hierarchical": hierarchical,
+                    "hierarchy_depth": hierarchy_depth,
+                    "hierarchy_iters": hierarchy_iters,
+                    "hierarchy_theta": hierarchy_theta,
                     "input_blocks": o.input_blocks,
                     "scheduled_blocks": o.scheduled_blocks,
                     "num_states": o.num_states,
@@ -468,6 +558,7 @@ def main() -> None:
                     "edp": f"{o.edp:.6f}" if o.ok else "",
                     "sct_solver": o.sct_solver,
                     "met_solver": o.met_solver,
+                    "hierarchy_note_count": o.hierarchy_note_count if o.ok else "",
                     "ok": o.ok,
                     "status": o.status,
                     "error": o.error,
@@ -492,6 +583,10 @@ def main() -> None:
         f.write("same_source=True\n")
         f.write("same_constraints=True\n")
         f.write("block_merge_enabled=True\n")
+        f.write(f"hierarchical={hierarchical}\n")
+        f.write(f"hierarchy_depth={hierarchy_depth}\n")
+        f.write(f"hierarchy_iters={hierarchy_iters}\n")
+        f.write(f"hierarchy_theta={hierarchy_theta}\n")
         f.write("criterion_check=layer_edp<=stage_edp\n\n")
 
         for name in sorted(by_net.keys()):
@@ -534,6 +629,8 @@ def main() -> None:
             f.write(f"  layer_input_blocks={layer.input_blocks}\n")
             f.write(f"  stage_scheduled_blocks={stage.scheduled_blocks}\n")
             f.write(f"  layer_scheduled_blocks={layer.scheduled_blocks}\n")
+            f.write(f"  stage_hierarchy_notes={stage.hierarchy_note_count}\n")
+            f.write(f"  layer_hierarchy_notes={layer.hierarchy_note_count}\n")
             f.write(f"  stage_edp={stage.edp:.6f}\n")
             f.write(f"  layer_edp={layer.edp:.6f}\n")
             f.write(f"  layer_over_stage={ratio:.6f}\n")
@@ -555,10 +652,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-

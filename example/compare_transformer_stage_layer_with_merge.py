@@ -56,7 +56,14 @@ def _build_stage_blocks_from_min_layers(min_layer_blocks: Sequence[Block]) -> li
     return blocks
 
 
-def _cfg(num_pes: int, max_layers_per_block: int) -> SearchConfig:
+def _cfg(
+    num_pes: int,
+    max_layers_per_block: int,
+    hierarchical: bool,
+    hierarchy_depth: int,
+    hierarchy_iters: int,
+    hierarchy_theta: float,
+) -> SearchConfig:
     return SearchConfig(
         batch_size=128,
         candidate_sub_batches=[4, 8, 16, 32],
@@ -75,6 +82,10 @@ def _cfg(num_pes: int, max_layers_per_block: int) -> SearchConfig:
         use_edp_objective=True,
         dependency_gap=0,
         allow_solver_fallback=False,
+        enable_hierarchical_pipeline=hierarchical,
+        max_hierarchy_depth=max(1, int(hierarchy_depth)),
+        max_hierarchy_iters=max(1, int(hierarchy_iters)),
+        hierarchy_theta=max(0.0, float(hierarchy_theta)),
     )
 
 
@@ -111,7 +122,9 @@ def _write_detail(path: Path, cand: Candidate) -> None:
         f.write(f"met_solver={res.met_solver_name}\n")
         f.write(f"latency={res.total_latency:.6f}\n")
         f.write(f"energy={res.total_energy:.6f}\n")
-        f.write(f"edp={res.total_edp:.6f}\n\n")
+        f.write(f"edp={res.total_edp:.6f}\n")
+        f.write(f"hierarchy_level={res.hierarchy_level}\n")
+        f.write(f"hierarchy_note_count={len(res.hierarchy_notes)}\n\n")
 
         f.write("scheduled_blocks\n")
         for i, name in enumerate(res.scheduled_blocks):
@@ -146,11 +159,32 @@ def _write_detail(path: Path, cand: Candidate) -> None:
         f.write("\nMeT_D(rows=state, cols=block)\n")
         f.write(_fmt_matrix(res.met.dram) + "\n")
 
+        if res.hierarchy_notes:
+            f.write("\nHierarchy_notes\n")
+            for line in res.hierarchy_notes:
+                f.write(f"  {line}\n")
 
-def _run_candidates(mode: str, blocks: list[Block], num_pes: int, caps: Sequence[int]) -> list[Candidate]:
+
+def _run_candidates(
+    mode: str,
+    blocks: list[Block],
+    num_pes: int,
+    caps: Sequence[int],
+    hierarchical: bool,
+    hierarchy_depth: int,
+    hierarchy_iters: int,
+    hierarchy_theta: float,
+) -> list[Candidate]:
     out: list[Candidate] = []
     for cap in caps:
-        cfg = _cfg(num_pes=num_pes, max_layers_per_block=int(cap))
+        cfg = _cfg(
+            num_pes=num_pes,
+            max_layers_per_block=int(cap),
+            hierarchical=hierarchical,
+            hierarchy_depth=hierarchy_depth,
+            hierarchy_iters=hierarchy_iters,
+            hierarchy_theta=hierarchy_theta,
+        )
         res = search_schedule(blocks, cfg)
         out.append(
             Candidate(
@@ -167,6 +201,10 @@ def _run_candidates(mode: str, blocks: list[Block], num_pes: int, caps: Sequence
 def main() -> None:
     parser = argparse.ArgumentParser(description="Transformer stage-vs-layer compare with block merge enabled")
     parser.add_argument("--num-pes", type=int, default=16)
+    parser.add_argument("--hierarchical", action="store_true", help="enable hierarchical block-inside and block-between pipeline search")
+    parser.add_argument("--hier-depth", type=int, default=2)
+    parser.add_argument("--hier-iters", type=int, default=3)
+    parser.add_argument("--hier-theta", type=float, default=0.02)
     args = parser.parse_args()
 
     if args.num_pes <= 0:
@@ -178,8 +216,26 @@ def main() -> None:
     # Sweep merge granularity to select best result for each mode.
     candidate_caps = [4, 8, 12, 16, 24, 32, 48, 64]
 
-    stage_cands = _run_candidates("stage_level", stage_blocks, args.num_pes, candidate_caps)
-    layer_cands = _run_candidates("layer_level", min_layers, args.num_pes, candidate_caps)
+    stage_cands = _run_candidates(
+        "stage_level",
+        stage_blocks,
+        args.num_pes,
+        candidate_caps,
+        hierarchical=bool(args.hierarchical),
+        hierarchy_depth=int(args.hier_depth),
+        hierarchy_iters=int(args.hier_iters),
+        hierarchy_theta=float(args.hier_theta),
+    )
+    layer_cands = _run_candidates(
+        "layer_level",
+        min_layers,
+        args.num_pes,
+        candidate_caps,
+        hierarchical=bool(args.hierarchical),
+        hierarchy_depth=int(args.hier_depth),
+        hierarchy_iters=int(args.hier_iters),
+        hierarchy_theta=float(args.hier_theta),
+    )
 
     best_stage = stage_cands[0]
     best_layer = layer_cands[0]
@@ -241,6 +297,10 @@ def main() -> None:
         f.write(f"num_pes={args.num_pes}\n")
         f.write(f"candidate_max_layers_per_block={candidate_caps}\n")
         f.write("block_merge_enabled=True\n")
+        f.write(f"hierarchical_enabled={bool(args.hierarchical)}\n")
+        f.write(f"hierarchy_depth={int(args.hier_depth)}\n")
+        f.write(f"hierarchy_iters={int(args.hier_iters)}\n")
+        f.write(f"hierarchy_theta={float(args.hier_theta)}\n")
         f.write("same_constraints=True\n\n")
         f.write("[best_stage]\n")
         f.write(f"  input_blocks={best_stage.input_blocks}\n")

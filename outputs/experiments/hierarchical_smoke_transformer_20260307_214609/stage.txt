@@ -1,0 +1,20 @@
+mode=stage
+input_blocks=5
+scheduled_blocks=5
+best_sub_batch=32
+latency=653315081476.1289
+energy=8.791683290992744
+edp=5743739285567.245
+hierarchy_level=0
+hierarchy_notes=9
+
+notes
+level=0 iter=0 parent_edp=8.825407e+13 blocks=5
+level=0 iter=0 block=6x encoder child_blocks=162 child_edp=2.459898e+12 flops_proxy=9.740840e+11 output_proxy=1.000000e-09
+level=0 iter=0 block=6x decoder child_blocks=306 child_edp=2.119778e+14 flops_proxy=1.720009e+12 output_proxy=1.004450e+04
+level=0 iter=0 child_feedback_improvement=9.349181e-01
+level=0 iter=1 parent_edp=5.743739e+12 blocks=5
+level=0 iter=1 block=6x encoder child_blocks=162 child_edp=2.459898e+12 flops_proxy=9.740840e+11 output_proxy=1.000000e-09
+level=0 iter=1 block=6x decoder child_blocks=306 child_edp=2.119778e+14 flops_proxy=1.720009e+12 output_proxy=1.004450e+04
+level=0 iter=1 child_feedback_improvement=-5.125955e+00
+level=0 iter=1 converge_by_theta theta=0.02
