@@ -27,7 +27,10 @@ class SearchConfig:
     max_layers_per_block: int = 3
     min_layers_per_block: int = 2
     noc_bandwidth: float = 4096.0
+    dram_bandwidth: float | None = None
+    noc_energy_per_unit: float = 0.0
     dram_energy_per_unit: float = 0.0075
+    dram_noc_hops: float = 1.0
 
     # Compute-side hardware model parameters (default: normalized).
     compute_power_per_tile: float = 1.0
@@ -45,6 +48,7 @@ class SearchConfig:
     use_edp_objective: bool = True
     dependency_gap: int = 0
     allow_solver_fallback: bool = False
+    latency_combine_mode: str = "max"
 
 
 @dataclass
@@ -167,20 +171,40 @@ def _caps_cover_pipeline_windows(
     return True
 
 
+def _combine_total_latency(compute_latency: float, memory_latency: float, mode: str) -> float:
+    mode_norm = (mode or "max").strip().lower()
+    if mode_norm == "sum":
+        return float(compute_latency + memory_latency)
+    if mode_norm != "max":
+        raise ValueError(f"unsupported latency_combine_mode={mode}")
+    return float(max(compute_latency, memory_latency))
+
+
 def _estimate_memory_cost(
     sct: SchedulingTable,
     met: MemoryTable,
     block_volumes: Sequence[float],
     noc_bandwidth: float,
+    dram_bandwidth: float | None,
+    noc_energy_per_unit: float,
     dram_energy_per_unit: float,
+    dram_noc_hops: float,
 ) -> tuple[float, float]:
     dram_live_volume = 0.0
     for i in range(sct.num_states):
         for j in range(sct.num_blocks):
             dram_live_volume += (sct.get(i, j) - float(met.dram[i, j])) * float(block_volumes[j])
 
-    mem_latency = noc_latency(dram_live_volume, max(1e-9, noc_bandwidth))
-    mem_energy = communication_energy(dram_live_volume, max(0.0, dram_energy_per_unit))
+    # Eq.19 (simplified for DRAM-sourced traffic):
+    # L_traffic = V/BW_NoC * H_D + V/BW_D
+    noc_term = noc_latency(dram_live_volume * max(0.0, float(dram_noc_hops)), max(1e-9, float(noc_bandwidth)))
+    dram_bw = float(dram_bandwidth) if dram_bandwidth is not None else float(noc_bandwidth)
+    dram_term = noc_latency(dram_live_volume, max(1e-9, dram_bw))
+    mem_latency = noc_term + dram_term
+
+    # Eq.21 (simplified): E = V*(E_NoC*H_D + E_DRAM)
+    per_mb = max(0.0, float(noc_energy_per_unit)) * max(0.0, float(dram_noc_hops)) + max(0.0, float(dram_energy_per_unit))
+    mem_energy = communication_energy(dram_live_volume, per_mb)
     return mem_latency, mem_energy
 
 
@@ -216,10 +240,13 @@ def _build_result_from_candidate(
     categories: list[str],
     active_pes: list[int],
     state_active_blocks: list[list[int]],
+    latency_combine_mode: str,
 ) -> SearchResult:
     assert candidate.met_opt is not None
 
-    total_latency = candidate.compute_latency + candidate.memory_latency
+    total_latency = _combine_total_latency(
+        candidate.compute_latency, candidate.memory_latency, latency_combine_mode
+    )
     total_energy = candidate.compute_energy + candidate.memory_energy
     total_edp = edp(total_latency, total_energy)
 
@@ -354,7 +381,10 @@ def search_schedule(
                 dram_capacity=config.dram_capacity,
                 heuristic_sram_keep_ratio=0.6,
                 noc_bandwidth=config.noc_bandwidth,
+                dram_bandwidth=config.dram_bandwidth,
+                noc_energy_per_unit=config.noc_energy_per_unit,
                 dram_energy_per_unit=config.dram_energy_per_unit,
+                dram_noc_hops=config.dram_noc_hops,
                 weight_latency=config.weight_latency,
                 weight_energy=config.weight_energy,
                 use_edp_objective=config.use_edp_objective,
@@ -368,7 +398,10 @@ def search_schedule(
             met=met_opt.table,
             block_volumes=block_outputs,
             noc_bandwidth=config.noc_bandwidth,
+            dram_bandwidth=config.dram_bandwidth,
+            noc_energy_per_unit=config.noc_energy_per_unit,
             dram_energy_per_unit=config.dram_energy_per_unit,
+            dram_noc_hops=config.dram_noc_hops,
         )
 
         cand.met_opt = met_opt
@@ -388,7 +421,10 @@ def search_schedule(
     # Final choose by total EDP.
     best_cand = min(
         stage2_candidates,
-        key=lambda x: edp(x.compute_latency + x.memory_latency, x.compute_energy + x.memory_energy),
+        key=lambda x: edp(
+            _combine_total_latency(x.compute_latency, x.memory_latency, config.latency_combine_mode),
+            x.compute_energy + x.memory_energy,
+        ),
     )
 
     return _build_result_from_candidate(
@@ -399,7 +435,9 @@ def search_schedule(
         categories=categories,
         active_pes=active_pes,
         state_active_blocks=state_active_blocks,
+        latency_combine_mode=config.latency_combine_mode,
     )
+
 
 
 

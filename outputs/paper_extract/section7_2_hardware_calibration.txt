@@ -1,0 +1,27 @@
+﻿source=Crane MICRO 2025, Section 7.2 (page 12 in extracted PDF)
+
+[paper_raw_parameters]
+clock_frequency=1 GHz
+tile_mac_count=1024 int8 MAC/tile
+sram_per_tile=1 MB
+noc_bandwidth=24 GB/s
+dram_bandwidth=0.5 GB/TOPS
+compute_energy=0.018 pJ/op
+noc_energy=0.7 pJ/bit
+dram_energy=7.5 pJ/bit
+
+[code_unit_mapping]
+flops_unit=op
+compute_power_per_tile=1024 * 2 * 1e9 = 2.048e12 op/s
+sram_capacity_at_PE16=16 * 1 MB = 16 MB
+dram_bandwidth_at_PE16=0.5 * (16 * 1024 * 2 * 1e9 / 1e12) = 16.384 GB/s = 16384 MB/s
+noc_bandwidth=24 GB/s = 24000 MB/s
+noc_energy_per_unit=0.7 pJ/bit -> 5.6e-06 J/MB
+dram_energy_per_unit=7.5 pJ/bit -> 6.0e-05 J/MB
+
+[latency_energy_calibration]
+memory_latency_formula=L_traffic = V*H_D/BW_NoC + V/BW_DRAM
+memory_energy_formula=E_traffic = V*(E_NoC*H_D + E_DRAM)
+total_latency_formula=L_total = max(L_comp, L_traffic)
+total_energy_formula=E_total = E_comp + E_traffic
+assumed_dram_noc_hops=1.0

@@ -165,7 +165,10 @@ def _cfg(batch_size: int, num_pes: int, max_layers_per_block: int, use_paper_hw_
             "sram_capacity": 15000.0,
             "dram_capacity": 30000.0,
             "noc_bandwidth": 4096.0,
+            "dram_bandwidth": 4096.0,
+            "noc_energy_per_unit": 0.0,
             "dram_energy_per_unit": 0.0075,
+            "dram_noc_hops": 1.0,
             "compute_power_per_tile": 1.0,
             "compute_energy_per_op": 1e-12,
         }
@@ -188,7 +191,11 @@ def _cfg(batch_size: int, num_pes: int, max_layers_per_block: int, use_paper_hw_
         use_edp_objective=True,
         dependency_gap=0,
         noc_bandwidth=float(hw["noc_bandwidth"]),
+        dram_bandwidth=float(hw["dram_bandwidth"]),
+        noc_energy_per_unit=float(hw["noc_energy_per_unit"]),
         dram_energy_per_unit=float(hw["dram_energy_per_unit"]),
+        dram_noc_hops=float(hw["dram_noc_hops"]),
+        latency_combine_mode="max",
         compute_power_per_tile=float(hw["compute_power_per_tile"]),
         compute_energy_per_op=float(hw["compute_energy_per_op"]),
         allow_solver_fallback=False,
@@ -254,9 +261,13 @@ def _run_one_with_timeout(
     num_pes: int,
     max_layers_per_block: int,
     timeout_sec: int,
+    use_paper_hw_7_2: bool,
 ) -> RunOutcome:
     q: mp.Queue = mp.Queue()
-    p = mp.Process(target=_worker_run, args=(q, network, mode, spec, num_pes, max_layers_per_block, use_paper_hw_7_2))
+    p = mp.Process(
+        target=_worker_run,
+        args=(q, network, mode, spec, num_pes, max_layers_per_block, use_paper_hw_7_2),
+    )
     p.start()
     p.join(timeout=timeout_sec)
 

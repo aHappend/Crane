@@ -1,0 +1,217 @@
+Crane: Inter-Layer Scheduling Framework for DNN Inference and Training Co-Support on Tiled Architecture MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea
+Notably, because in Step-2, recomputation is only performed to
+recover the previously discarded sub-batches of activation data, Eq.
+3 is replaced with the following constraint:
+ScT𝐵𝑊 2
+𝑖,𝑗 = MeT𝐷,𝐹𝑊
+2𝑁 −1,𝑗 𝑖 ∈ [ 𝑁 + 𝑗 − 1, · · ·, 2𝑁 − 1], (15)
+where MeT𝐷,𝐹𝑊
+2𝑁 −1,𝑗 is the index of the first sub-batch of activation
+stored for sub-block 𝐵 𝑗 in State-(2𝑁 − 1) during forward propa-
+gation, minus 1 (to account for the open bound), and equivalently
+represents the index of the last sub-batch discarded.
+5.4 Latency & Energy Evaluation
+Upon representing the execution scheme, fusion strategy, and re-
+computation scheme using ScT and MeT, we can construct perfor-
+mance model to evaluate latency and energy for a given scheduling
+configuration, preparing for scheduling space exploration.
+Latency Evaluation. The latency performance is modeled based
+on delays incurred from PE computation and data traffic.
+Computation-incurred Latency. At the hardware tile granularity,
+the computation-incurred latency of each state is determined by
+the workload and tile utilization. The workload of sub-block 𝐵 𝑗
+(which could be a single layer or multiple layers within a block) for
+processing one sub-batch, denoted as Workload𝑗 , is the number of
+FLOPs required by that sub-block. To evaluate hardware utilization,
+we follow the method adopted in SET: For 𝑇𝑖,𝑗 tiles allocated for
+sub-block 𝐵 𝑗 in State-𝑖, the corresponding utilization ratio 𝑢𝑖,𝑗 is
+calculated by mapping the four dimensions (dim𝑞) of one sub-batch
+onto the four factors of 𝑇𝑖,𝑗 (𝑘1
+𝑖,𝑗 × 𝑘2
+𝑖,𝑗 × 𝑘3
+𝑖,𝑗 × 𝑘4
+𝑖,𝑗 = 𝑇𝑖,𝑗 ) and
+calculating the product of utilization across these dimensions:
+𝑢𝑖,𝑗 =
+4Ö
+𝑞=1
+dim𝑞
+⌈ dim𝑞
+𝑘𝑞
+𝑖,𝑗
+⌉𝑘𝑞
+𝑖,𝑗
+. (16)
+Then the computation latency of sub-block 𝐵 𝑗 in State-𝑖 is as:
+𝐿comp,𝑖,𝑗 = Workload𝑗
+𝑢𝑖,𝑗 × 𝑇𝑖,𝑗 × 𝑃 , (17)
+where 𝑃 denotes the computing power per unit time for each tile.
+Since computation-incurred latency for a DNN in one state is deter-
+mined by the bottleneck sub-block in that state (as sub-blocks are
+processed concurrently within one state), and sub-block execution
+in different states happens sequentially, the overall computation-
+incurred latency 𝐿comp for the entire model can be calculated as:
+𝐿comp =
+∑︁
+𝑖
+𝑠𝑖 × max
+𝑗
+ 𝐿comp,𝑖,𝑗
+ . (18)
+Note that Eq. 18 describes the latency evaluation for forward
+propagation. It can be easily extended for backward propagation
+by including the computation of gradients.
+Data Traffic-incurred Latency.From the perspective of a hardware
+tile, the latency incurred by transferring its required input data
+consists of three parts: the cost incurred by reading data from
+DRAM, SRAM, and other hardware tiles. Since the tiled architecture
+uses NoC as a unified fabric to transfer data, the data traffic-incurred
+latency can be evaluated as:
+𝐿traffic =
+∑︁
+𝑖,𝑗,𝑚
+(Dep𝐶
+𝑚,𝑖,𝑗 𝐻𝐶 + Dep𝑆
+𝑚,𝑖,𝑗 𝐻𝑆 + Dep𝐷
+𝑚,𝑖,𝑗 𝐻𝐷 )𝑉𝑚/𝐵𝑊𝑁
++ Dep𝐷
+𝑚,𝑖,𝑗 𝑉𝑚/𝐵𝑊𝐷,
+(19)
+𝑩𝐒𝐮𝐛𝟏𝑩𝐒𝐮𝐛𝟏 𝑩𝐒𝐮𝐛4 𝑩𝐒𝐮𝐛6
+ScT
+𝑩𝐒𝐮𝐛2
+𝑩𝐒𝐮𝐛2 𝑩𝐒𝐮𝐛4 𝑩𝐒𝐮𝐛5
+𝑩𝐒𝐮𝐛3 𝑩𝐒𝐮𝐛4 𝑩𝐒𝐮𝐛5
+Forward
+Backward
+...
+...
+𝑩𝐒𝐮𝐛1𝑩𝐒𝐮𝐛1
+ScT
+ ScT
+𝑩𝐒𝐮𝐛4
+...
+...
+𝑩 𝐒𝐮𝐛6
+MeT ...
+ MeT...
+𝑩𝐒𝐮𝐛4
+MeT
+𝑩𝐒𝐮𝐛6
+ScT ...
+ ScT
+ ScT
+...
+MeT
+ MeT
+MeT
+𝑩𝐒𝐮𝐛3
+Schedule 
+Optimization
+Intra-layer 
+Exploration
+Sub-batch Size 
+Candidates
+R R
+R R
+1
+2
+3
+Input
+v
+Inference
+Training
+Forward
+vv
+𝑩𝐒𝐮𝐛𝟏𝑩𝐒𝐮𝐛𝟏
+v
+𝑩𝐒𝐮𝐛𝟏
+𝑩𝐒𝐮𝐛2𝑩𝐒𝐮𝐛2
+𝑩𝐒𝐮𝐛3𝑩𝐒𝐮𝐛3
+𝑩𝐒𝐮𝐛4𝑩𝐒𝐮𝐛4
+𝑩𝐒𝐮𝐛5𝑩𝐒𝐮𝐛5
+𝑩𝐒𝐮𝐛6𝑩𝐒𝐮𝐛6
+SRAM/DRAM 
+Capacity
+Intra-layer Exploration
+Intra-layer Exploration
+Output
+𝑩𝐒𝐮𝐛3𝑩𝐒𝐮𝐛3
+Optimal Sub-
+batch Size
+Optimal ScT
+t
+tiles
+Optimal MeT
+t
+DRAM Cap.
+t
+SRAM Cap.
+Forward
+ Backward
+DNN Model
+Tiled 
+Architecture
+... ...
+Select Top K2 Based on Cost trafficSelect Top K2 Based on Cost traffic
+Select Top K1 Based on Cost compSelect Top K1 Based on Cost comp
+... ... Select Top K3 Based on Cost compSelect Top K3 Based on Cost comp
+Select Top K4 Based on Cost trafficSelect Top K4 Based on Cost traffic
+v
+Figure 7: Overall intra-block exploration and optimization process.
+where 𝑉𝑚 is the storage size for one sub-batch of data and the
+corresponding weight, and 𝐵𝑊𝑁 is the bandwidth of NoC. Here,
+for data movement from sub-block 𝐵𝑚 to sub-block 𝐵 𝑗 in State-𝑖,
+Dep𝐶
+𝑚,𝑖,𝑗 , Dep𝑆
+𝑚,𝑖,𝑗 , and Dep𝐷
+𝑚,𝑖,𝑗 represent the amount of data trans-
+ferred from other hardware tiles, SRAM, and DRAM, respectively.
+Since ScT and MeT record all the computing and memory statuses
+for all sub-blocks, the amount of these three types of data trans-
+fer can be easily calculated from the two tables. Additionally, 𝐻𝐶,
+𝐻𝑆, and 𝐻𝐷 represent the hop counts for transferring these data
+through NoC, while 𝐵𝑊𝐷 represents the bandwidth of DRAM. The
+latency for data sourced from DRAM is included in Eq. 19 since it
+is transferred via NoC but must first be read from the DRAM.
+Energy Evaluation. Energy costs are evaluated similarly by
+considering the consumption due to computation and data traffic.
+Computation-incurred Energy Consumption. Eq. 20 describes the
+evaluation model for computation-incurred energy cost ( 𝐸comp).
+Here, 𝐸comp, unit is the unit energy consumption for each opera-
+tion, and 𝑠𝑖 Workload𝑗
+𝑢𝑖,𝑗 represents the equivalent number of FLOPs
+required for computation, adjusted for the tile utilization.
+𝐸comp = 𝐸comp, unit ×
+∑︁
+𝑖,𝑗
+𝑠𝑖Workload𝑗
+𝑢𝑖,𝑗
+. (20)
+Data Traffic-incurred Energy Consumption. For the tiled architec-
+ture, the energy consumption due to data traffic has two sources:
+data movement through NoC and from/to DRAM. Eq. 21 describes
+the evaluation of the total energy cost incurred by transferring data
+at the tile level. Here,𝐸NoC, unit and 𝐸DRAM, unit are the unit energy
+consumption per hop and access, respectively.
+𝐸traffic =
+∑︁
+𝑖,𝑗,𝑚
+𝑉𝑚𝐸NoC, unit (Dep𝐶
+𝑚,𝑖,𝑗 𝐻𝐶 + Dep𝑆
+𝑚,𝑖,𝑗 𝐻𝑆 +
+Dep𝐷
+𝑚,𝑖,𝑗 𝐻𝐷 ) + 𝑉𝑚𝐸DRAM, unitDep𝐷
+𝑚,𝑖,𝑗 .
+(21)
+5.5 Overall Exploration & Optimization Process
+Based on the table-format schedule representations and the mod-
+eled cost function for hardware performance, we are now ready to
+describe the automatic exploration process for inter-layer schedul-
+ing. Note that selecting the proper batch splitting plan (𝐵𝑆sub), as
+another important decision factor affecting the overall scheduling
+scheme, will be integrated into the search process.
+Fig. 7 shows the overall exploration for inter-layer scheduling.
+Given the pre-determined batch size 𝐵𝑆 by the workload, we first
+enumerate all its factors as the candidates for 𝐵𝑆sub. Then, for each
+1258

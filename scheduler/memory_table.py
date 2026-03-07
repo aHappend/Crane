@@ -82,7 +82,10 @@ def _optimize_memory_with_ortools(
     sram_capacity: float,
     dram_capacity: float,
     noc_bandwidth: float,
+    dram_bandwidth: float | None,
+    noc_energy_per_unit: float,
     dram_energy_per_unit: float,
+    dram_noc_hops: float,
     weight_latency: float,
     weight_energy: float,
     use_edp_objective: bool,
@@ -143,15 +146,19 @@ def _optimize_memory_with_ortools(
             <= float(dram_capacity)
         )
 
-    # Eq.23-inspired traffic objective.
+    # Eq.23-inspired objective using Eq.19/Eq.21 style terms on DRAM-sourced traffic.
     # Here we approximate traffic by DRAM-live volume tracked by (ScT - MeT_D).
     dram_live_volume = solver.Sum(
         (float(sct.get(i, j)) - md[i][j]) * float(block_volumes[j])
         for i in range(n_states)
         for j in range(n_blocks)
     )
-    traffic_latency_expr = dram_live_volume / max(1e-9, float(noc_bandwidth))
-    traffic_energy_expr = dram_live_volume * max(0.0, float(dram_energy_per_unit))
+    dram_bw = float(dram_bandwidth) if dram_bandwidth is not None else float(noc_bandwidth)
+    hop = max(0.0, float(dram_noc_hops))
+    traffic_latency_expr = (dram_live_volume * hop) / max(1e-9, float(noc_bandwidth)) + dram_live_volume / max(1e-9, dram_bw)
+    traffic_energy_expr = dram_live_volume * (
+        max(0.0, float(noc_energy_per_unit)) * hop + max(0.0, float(dram_energy_per_unit))
+    )
 
     if use_edp_objective:
         wlat = max(1e-9, float(weight_latency))
@@ -160,8 +167,8 @@ def _optimize_memory_with_ortools(
         scaled_energy_expr = wene * traffic_energy_expr
 
         vol_ub = sum(float(sct.get(i, j)) * float(block_volumes[j]) for i in range(n_states) for j in range(n_blocks))
-        lat_ub = vol_ub / max(1e-9, float(noc_bandwidth))
-        ene_ub = vol_ub * max(0.0, float(dram_energy_per_unit))
+        lat_ub = (vol_ub * hop) / max(1e-9, float(noc_bandwidth)) + vol_ub / max(1e-9, dram_bw)
+        ene_ub = vol_ub * (max(0.0, float(noc_energy_per_unit)) * hop + max(0.0, float(dram_energy_per_unit)))
         _, _, z = _add_mccormick_product_objective(
             solver=solver,
             x_expr=scaled_latency_expr,
@@ -191,16 +198,15 @@ def _optimize_memory_with_ortools(
             met.set_dram(i, j, float(int(round(md[i][j].solution_value()))))
 
     # Report objective in EDP form when enabled.
-    traffic_latency = sum(
+    solved_volume = sum(
         (sct.get(i, j) - met.dram[i, j]) * float(block_volumes[j])
         for i in range(n_states)
         for j in range(n_blocks)
-    ) / max(1e-9, float(noc_bandwidth))
-    traffic_energy = sum(
-        (sct.get(i, j) - met.dram[i, j]) * float(block_volumes[j])
-        for i in range(n_states)
-        for j in range(n_blocks)
-    ) * max(0.0, float(dram_energy_per_unit))
+    )
+    traffic_latency = (solved_volume * hop) / max(1e-9, float(noc_bandwidth)) + solved_volume / max(1e-9, dram_bw)
+    traffic_energy = solved_volume * (
+        max(0.0, float(noc_energy_per_unit)) * hop + max(0.0, float(dram_energy_per_unit))
+    )
 
     if use_edp_objective:
         obj = float((weight_latency * traffic_latency) * (weight_energy * traffic_energy))
@@ -218,7 +224,10 @@ def optimize_memory_table(
     dram_capacity: float,
     heuristic_sram_keep_ratio: float = 0.6,
     noc_bandwidth: float = 4096.0,
+    dram_bandwidth: float | None = None,
+    noc_energy_per_unit: float = 0.0,
     dram_energy_per_unit: float = 0.0075,
+    dram_noc_hops: float = 1.0,
     weight_latency: float = 1.0,
     weight_energy: float = 1.0,
     use_edp_objective: bool = True,
@@ -238,7 +247,10 @@ def optimize_memory_table(
             sram_capacity=sram_capacity,
             dram_capacity=dram_capacity,
             noc_bandwidth=noc_bandwidth,
+            dram_bandwidth=dram_bandwidth,
+            noc_energy_per_unit=noc_energy_per_unit,
             dram_energy_per_unit=dram_energy_per_unit,
+            dram_noc_hops=dram_noc_hops,
             weight_latency=weight_latency,
             weight_energy=weight_energy,
             use_edp_objective=use_edp_objective,
