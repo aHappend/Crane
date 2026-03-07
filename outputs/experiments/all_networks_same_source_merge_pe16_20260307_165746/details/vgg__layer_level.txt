@@ -1,0 +1,16 @@
+network=vgg
+mode=layer_level
+source_ref=src/nns/vgg.cpp
+batch_size=64
+num_pes=16
+max_layers_per_block=32
+status=ok
+input_blocks=21
+scheduled_blocks=1
+num_states=1
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=3473684210.581983
+energy=1.765579
+edp=6133063712.009637

@@ -1,0 +1,16 @@
+network=transformer
+mode=layer_level
+source_ref=src/nns/transformer.cpp
+batch_size=128
+num_pes=16
+max_layers_per_block=32
+status=ok
+input_blocks=471
+scheduled_blocks=15
+num_states=29
+best_sub_batch=16
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=47598449843.493774
+energy=0.756749
+edp=36020070716.496643

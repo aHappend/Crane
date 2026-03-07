@@ -1,0 +1,16 @@
+network=densenet
+mode=stage_level
+source_ref=src/nns/densenet.cpp
+batch_size=64
+num_pes=16
+max_layers_per_block=32
+status=ok
+input_blocks=9
+scheduled_blocks=6
+num_states=11
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=2631668077.900086
+energy=0.038834
+edp=102197962.948537

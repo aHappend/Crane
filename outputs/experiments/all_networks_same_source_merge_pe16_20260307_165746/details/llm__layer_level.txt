@@ -1,0 +1,16 @@
+network=llm
+mode=layer_level
+source_ref=src/nns/llm.cpp
+batch_size=128
+num_pes=16
+max_layers_per_block=32
+status=ok
+input_blocks=44
+scheduled_blocks=2
+num_states=3
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=36346309561.911446
+energy=32.114723
+edp=1167251650296.345947
