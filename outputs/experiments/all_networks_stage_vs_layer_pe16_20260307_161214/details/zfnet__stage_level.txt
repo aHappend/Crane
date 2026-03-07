@@ -1,0 +1,17 @@
+network=zfnet
+mode=stage_level
+source_ref=src/nns/zfnet.cpp
+batch_size=64
+num_pes=16
+target_raw_layers=11
+status=ok
+input_blocks=2
+scheduled_blocks=2
+num_states=3
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=897617564.657835
+energy=1.126345
+edp=1011026996.323111
+state_batches=1,1,1

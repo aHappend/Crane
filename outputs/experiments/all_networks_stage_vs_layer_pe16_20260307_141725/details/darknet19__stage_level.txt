@@ -1,0 +1,16 @@
+network=darknet19
+mode=stage_level
+source_ref=src/nns/darknet19.cpp
+batch_size=64
+num_pes=16
+target_raw_layers=25
+input_blocks=8
+scheduled_blocks=8
+num_states=15
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=1848568288.059446
+energy=5.912120
+edp=10928957214.102154
+state_batches=1,1,0,0,0,0,0,0,1,1,0,0,0,0,0

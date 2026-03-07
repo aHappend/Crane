@@ -1,0 +1,25 @@
+network,mode,source_ref,batch_size,num_pes,timeout_sec,target_raw_layers,input_blocks,scheduled_blocks,num_states,best_sub_batch,latency,energy,edp,sct_solver,met_solver,state_batches,ok,status,error
+alexnet,stage_level,src/nns/alexnet.cpp,64,16,60,19,9,9,17,32,1126067530.581510,4.912772,5532112692.668243,ortools-scip,ortools-scip,"1,1,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0",True,ok,
+alexnet,layer_level,src/nns/alexnet.cpp,64,16,60,19,19,19,37,32,1165194104.304903,10.368525,12081343832.848373,ortools-scip,ortools-scip,"1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",True,ok,
+darknet19,stage_level,src/nns/darknet19.cpp,64,16,60,25,2,2,3,32,1645848776.916830,1.407444,2316439384.208252,ortools-scip,ortools-scip,"1,1,1",True,ok,
+darknet19,layer_level,src/nns/darknet19.cpp,64,16,60,25,25,25,49,32,1862190691.426816,16.699895,31098389111.877716,ortools-scip,ortools-scip,"1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",True,ok,
+densenet,stage_level,src/nns/densenet.cpp,64,16,60,126,9,9,17,32,1960222275.010214,8.378200,16423133616.408424,ortools-scip,ortools-scip,"0,0,2,0,0,0,0,0,0,0,0,2,0,0,0,0,0",True,ok,
+densenet,layer_level,src/nns/densenet.cpp,64,16,60,126,0,0,0,0,,,,,,,False,timeout,timeout after 60s
+gnmt,stage_level,src/nns/gnmt.cpp,128,16,60,82,4,4,7,32,7716392020.820364,0.254173,1961297105.676898,ortools-scip,ortools-scip,"0,0,0,4,0,0,0",True,ok,
+gnmt,layer_level,src/nns/gnmt.cpp,128,16,60,82,82,82,163,32,7687730951.183694,262.990687,2021801641416.447021,ortools-scip,ortools-scip,"1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",True,ok,
+googlenet,stage_level,src/nns/googlenet.cpp,64,16,60,72,5,5,9,32,2657567350.712526,3.203182,8512672920.980596,ortools-scip,ortools-scip,"1,1,0,0,0,1,1,0,0",True,ok,
+googlenet,layer_level,src/nns/googlenet.cpp,64,16,60,72,72,72,143,32,2743314065.194530,55.642435,152644673711.363586,ortools-scip,ortools-scip,"1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",True,ok,
+incep_resnet,stage_level,src/nns/incep_resnet.cpp,64,16,60,153,7,7,13,32,4078581363.004173,0.060093,245093904.603322,ortools-scip,ortools-scip,"0,0,0,0,0,0,2,0,0,0,0,0,0",True,ok,
+incep_resnet,layer_level,src/nns/incep_resnet.cpp,64,16,60,153,0,0,0,0,,,,,,,False,timeout,timeout after 60s
+llm,stage_level,src/nns/llm.cpp,128,16,60,44,3,3,5,32,23098228663.478149,1.267928,29286894144.629990,ortools-scip,ortools-scip,"0,0,4,0,0",True,ok,
+llm,layer_level,src/nns/llm.cpp,128,16,60,44,44,44,87,32,23098228673.801552,318.489572,7356544956391.674805,ortools-scip,ortools-scip,"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",True,ok,
+pnasnet,stage_level,src/nns/pnasnet.cpp,64,16,60,603,5,5,9,32,2837605066.887799,0.040793,115754169.352713,ortools-scip,ortools-scip,"0,0,0,0,2,0,0,0,0",True,ok,
+pnasnet,layer_level,src/nns/pnasnet.cpp,64,16,60,603,0,0,0,0,,,,,,,False,timeout,timeout after 60s
+resnet,stage_level,src/nns/resnet.cpp,64,16,60,72,6,6,11,32,4488233326.405700,4.645500,20850089653.234177,ortools-scip,ortools-scip,"1,1,0,0,0,0,1,1,0,0,0",True,ok,
+resnet,layer_level,src/nns/resnet.cpp,64,16,60,72,72,72,143,32,4530892906.760681,63.777369,288968430111.961487,ortools-scip,ortools-scip,"1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",True,ok,
+transformer,stage_level,src/nns/transformer.cpp,128,16,60,471,5,5,9,32,12097969389.302654,0.200939,2430952360.118391,ortools-scip,ortools-scip,"0,0,0,0,4,0,0,0,0",True,ok,
+transformer,layer_level,src/nns/transformer.cpp,128,16,60,471,0,0,0,0,,,,,,,False,timeout,timeout after 60s
+vgg,stage_level,src/nns/vgg.cpp,64,16,60,21,2,2,3,32,1954627949.245594,1.942898,3797643151.809583,ortools-scip,ortools-scip,"1,1,1",True,ok,
+vgg,layer_level,src/nns/vgg.cpp,64,16,60,21,21,21,41,32,2286000980.895027,17.991576,41128760419.703247,ortools-scip,ortools-scip,"1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",True,ok,
+zfnet,stage_level,src/nns/zfnet.cpp,64,16,60,11,2,2,3,32,897617564.657835,1.126345,1011026996.323111,ortools-scip,ortools-scip,"1,1,1",True,ok,
+zfnet,layer_level,src/nns/zfnet.cpp,64,16,60,11,11,11,21,32,1027170323.806238,5.626435,5779306778.535726,ortools-scip,ortools-scip,"1,1,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0",True,ok,

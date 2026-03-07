@@ -1,0 +1,8 @@
+network=transformer
+mode=layer_level
+source_ref=src/nns/transformer.cpp
+batch_size=128
+num_pes=16
+target_raw_layers=471
+status=timeout
+timeout_sec=60

@@ -1,0 +1,8 @@
+network=densenet
+mode=layer_level
+source_ref=src/nns/densenet.cpp
+batch_size=64
+num_pes=16
+target_raw_layers=126
+status=timeout
+timeout_sec=60

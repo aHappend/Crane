@@ -1,0 +1,8 @@
+network=incep_resnet
+mode=layer_level
+source_ref=src/nns/incep_resnet.cpp
+batch_size=64
+num_pes=16
+target_raw_layers=153
+status=timeout
+timeout_sec=60

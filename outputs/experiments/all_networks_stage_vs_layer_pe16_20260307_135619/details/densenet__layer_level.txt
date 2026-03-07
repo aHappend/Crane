@@ -1,0 +1,16 @@
+network=densenet
+mode=layer_level
+source_ref=src/nns/densenet.cpp
+batch_size=64
+num_pes=16
+target_raw_layers=126
+input_blocks=126
+scheduled_blocks=126
+num_states=251
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=1972420103.746833
+energy=158.412265
+edp=312455535604.706543
+state_batches=1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0

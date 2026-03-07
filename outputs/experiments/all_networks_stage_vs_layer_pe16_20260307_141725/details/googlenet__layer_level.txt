@@ -1,0 +1,16 @@
+network=googlenet
+mode=layer_level
+source_ref=src/nns/googlenet.cpp
+batch_size=64
+num_pes=16
+target_raw_layers=72
+input_blocks=72
+scheduled_blocks=72
+num_states=143
+best_sub_batch=32
+sct_solver=ortools-scip
+met_solver=ortools-scip
+latency=2752395061.383143
+energy=57.309418
+edp=157738158414.047058
+state_batches=1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
