@@ -31,6 +31,8 @@ class SearchConfig:
     noc_energy_per_unit: float = 0.0
     dram_energy_per_unit: float = 0.0075
     dram_noc_hops: float = 1.0
+    noc_hops_compute: float = 1.0
+    noc_hops_sram: float = 1.0
 
     # Compute-side hardware model parameters (default: normalized).
     compute_power_per_tile: float = 1.0
@@ -84,6 +86,7 @@ class SearchResult:
     total_edp: float
     hierarchy_level: int = 0
     hierarchy_notes: list[str] = field(default_factory=list)
+    hierarchy_traces: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass
@@ -190,37 +193,120 @@ def _combine_total_latency(compute_latency: float, memory_latency: float, mode: 
     return float(max(compute_latency, memory_latency))
 
 
+def _estimate_dep_traffic(
+    sct: SchedulingTable,
+    met: MemoryTable,
+    block_volumes: Sequence[float],
+    block_dependencies: Sequence[tuple[int, int]],
+) -> tuple[float, float, float]:
+    """Estimate (Dep_C, Dep_S, Dep_D) in MB using ScT/MeT + dependencies.
+
+    This follows Eq.19/21 variable semantics at a coarse granularity:
+    - Dep_C: direct producer->consumer transfer in the same state
+    - Dep_S: transfer from SRAM-resident parent outputs
+    - Dep_D: transfer from DRAM when SRAM cannot satisfy demand
+    """
+
+    n_states = sct.num_states
+    n_blocks = sct.num_blocks
+
+    deps_by_child: dict[int, list[int]] = {}
+    for p, c in block_dependencies:
+        if 0 <= p < n_blocks and 0 <= c < n_blocks and p != c:
+            deps_by_child.setdefault(c, []).append(p)
+
+    # Delta processed sub-batches per state/block.
+    delta = [[0.0 for _ in range(n_blocks)] for _ in range(n_states)]
+    for i in range(n_states):
+        for j in range(n_blocks):
+            cur = float(sct.get(i, j))
+            prev = float(sct.get(i - 1, j)) if i > 0 else 0.0
+            delta[i][j] = max(0.0, cur - prev)
+
+    dep_c = 0.0
+    dep_s = 0.0
+    dep_d = 0.0
+
+    for i in range(n_states):
+        prev_i = max(0, i - 1)
+        for child in range(n_blocks):
+            need_sb = float(delta[i][child])
+            if need_sb <= 0:
+                continue
+
+            parents = deps_by_child.get(child, [])
+            if not parents:
+                # Source/input block: conservatively model as DRAM-fed.
+                dep_d += need_sb * float(block_volumes[child])
+                continue
+
+            per_parent_need = need_sb / float(max(1, len(parents)))
+            for parent in parents:
+                vol = float(block_volumes[parent])
+
+                # Dep_C: direct same-state producer->consumer transfer.
+                parent_new = float(delta[i][parent])
+                from_c = min(per_parent_need, parent_new)
+                remain = per_parent_need - from_c
+
+                # Dep_S: read from SRAM range tracked by (MeT_S, ScT].
+                sram_live = max(0.0, float(sct.get(prev_i, parent)) - float(met.sram[prev_i, parent]))
+                from_s = min(remain, sram_live)
+                remain -= from_s
+
+                # Dep_D: fallback to DRAM range tracked by (MeT_D, ScT].
+                dram_live = max(0.0, float(sct.get(prev_i, parent)) - float(met.dram[prev_i, parent]))
+                from_d = min(remain, dram_live)
+                remain -= from_d
+
+                if remain > 0.0:
+                    # Conservative completion from DRAM when historical ranges are insufficient.
+                    from_d += remain
+
+                dep_c += from_c * vol
+                dep_s += from_s * vol
+                dep_d += from_d * vol
+
+    return dep_c, dep_s, dep_d
+
+
 def _estimate_memory_cost(
     sct: SchedulingTable,
     met: MemoryTable,
     block_volumes: Sequence[float],
+    block_dependencies: Sequence[tuple[int, int]],
     noc_bandwidth: float,
     dram_bandwidth: float | None,
     noc_energy_per_unit: float,
     dram_energy_per_unit: float,
     dram_noc_hops: float,
+    noc_hops_compute: float,
+    noc_hops_sram: float,
 ) -> tuple[float, float]:
-    dram_live_volume = 0.0
-    for i in range(sct.num_states):
-        for j in range(sct.num_blocks):
-            dram_live_volume += (sct.get(i, j) - float(met.dram[i, j])) * float(block_volumes[j])
-
-    # Eq.19 (simplified for DRAM-sourced traffic):
-    # L_traffic = V/BW_NoC * H_D + V/BW_D
-    noc_term = noc_latency(
-        dram_live_volume * max(0.0, float(dram_noc_hops)),
-        max(1e-9, float(noc_bandwidth)),
+    dep_c, dep_s, dep_d = _estimate_dep_traffic(
+        sct=sct,
+        met=met,
+        block_volumes=block_volumes,
+        block_dependencies=block_dependencies,
     )
+
+    # Eq.19: (Dep_C*H_C + Dep_S*H_S + Dep_D*H_D)/BW_NoC + Dep_D/BW_D
+    h_c = max(0.0, float(noc_hops_compute))
+    h_s = max(0.0, float(noc_hops_sram))
+    h_d = max(0.0, float(dram_noc_hops))
+
+    noc_traffic = dep_c * h_c + dep_s * h_s + dep_d * h_d
+    noc_term = noc_latency(noc_traffic, max(1e-9, float(noc_bandwidth)))
+
     dram_bw = float(dram_bandwidth) if dram_bandwidth is not None else float(noc_bandwidth)
-    dram_term = noc_latency(dram_live_volume, max(1e-9, dram_bw))
+    dram_term = noc_latency(dep_d, max(1e-9, dram_bw))
     mem_latency = noc_term + dram_term
 
-    # Eq.21 (simplified): E = V*(E_NoC*H_D + E_DRAM)
-    per_mb = (
-        max(0.0, float(noc_energy_per_unit)) * max(0.0, float(dram_noc_hops))
-        + max(0.0, float(dram_energy_per_unit))
+    # Eq.21: E_NoC*(Dep_C*H_C + Dep_S*H_S + Dep_D*H_D) + E_DRAM*Dep_D
+    mem_energy = (
+        communication_energy(noc_traffic, max(0.0, float(noc_energy_per_unit)))
+        + communication_energy(dep_d, max(0.0, float(dram_energy_per_unit)))
     )
-    mem_energy = communication_energy(dram_live_volume, per_mb)
     return mem_latency, mem_energy
 
 
@@ -259,6 +345,7 @@ def _build_result_from_candidate(
     latency_combine_mode: str,
     hierarchy_level: int,
     hierarchy_notes: list[str] | None,
+    trace_path: str | None,
 ) -> SearchResult:
     assert candidate.met_opt is not None
 
@@ -267,6 +354,23 @@ def _build_result_from_candidate(
     )
     total_energy = candidate.compute_energy + candidate.memory_energy
     total_edp = edp(total_latency, total_energy)
+
+    traces: list[dict[str, object]] = []
+    if trace_path is not None:
+        traces.append(
+            {
+                "path": str(trace_path),
+                "level": int(hierarchy_level),
+                "best_sub_batch": int(candidate.sub_batch),
+                "scheduled_blocks": list(block_names),
+                "state_order": list(state_order),
+                "state_categories": list(categories),
+                "state_batches": list(candidate.sct_opt.state_workloads),
+                "sct": candidate.sct_opt.sct.table.tolist(),
+                "met_s": candidate.met_opt.table.sram.tolist(),
+                "met_d": candidate.met_opt.table.dram.tolist(),
+            }
+        )
 
     return SearchResult(
         best_sub_batch=candidate.sub_batch,
@@ -298,6 +402,7 @@ def _build_result_from_candidate(
         total_edp=total_edp,
         hierarchy_level=hierarchy_level,
         hierarchy_notes=list(hierarchy_notes or []),
+        hierarchy_traces=traces,
     )
 
 
@@ -349,6 +454,7 @@ def _flat_search_prepared(
     block_outputs_override: Sequence[float] | None = None,
     hierarchy_level: int = 0,
     hierarchy_notes: list[str] | None = None,
+    trace_path: str | None = None,
 ) -> SearchResult:
     if not work_blocks:
         raise ValueError("blocks must not be empty")
@@ -469,11 +575,14 @@ def _flat_search_prepared(
             sct=cand.sct_opt.sct,
             met=met_opt.table,
             block_volumes=block_outputs,
+            block_dependencies=block_deps,
             noc_bandwidth=config.noc_bandwidth,
             dram_bandwidth=config.dram_bandwidth,
             noc_energy_per_unit=config.noc_energy_per_unit,
             dram_energy_per_unit=config.dram_energy_per_unit,
             dram_noc_hops=config.dram_noc_hops,
+            noc_hops_compute=config.noc_hops_compute,
+            noc_hops_sram=config.noc_hops_sram,
         )
 
         cand.met_opt = met_opt
@@ -510,6 +619,7 @@ def _flat_search_prepared(
         latency_combine_mode=config.latency_combine_mode,
         hierarchy_level=hierarchy_level,
         hierarchy_notes=hierarchy_notes,
+        trace_path=trace_path,
     )
 
 
@@ -526,6 +636,7 @@ def _hierarchical_search(
     current_flops = list(base_flops)
     current_outputs = list(base_outputs)
     notes: list[str] = []
+    trace_map: dict[str, dict[str, object]] = {}
 
     best_result: SearchResult | None = None
 
@@ -541,7 +652,11 @@ def _hierarchical_search(
             block_outputs_override=current_outputs,
             hierarchy_level=len(lineage),
             hierarchy_notes=notes,
+            trace_path="root" if not lineage else "root/" + "/".join(lineage),
         )
+
+        for tr in flat_now.hierarchy_traces:
+            trace_map[str(tr.get("path", f"level{len(lineage)}"))] = tr
 
         notes.append(
             f"level={len(lineage)} iter={iter_idx} parent_edp={flat_now.total_edp:.6e} blocks={len(work_blocks)}"
@@ -573,6 +688,8 @@ def _hierarchical_search(
                 depth=depth - 1,
                 lineage=lineage + [blk.name],
             )
+            for tr in child_result.hierarchy_traces:
+                trace_map[str(tr.get("path", f"child/{blk.name}"))] = tr
 
             child_sub_batches = max(1, int(child_cfg.batch_size // max(1, child_result.best_sub_batch)))
             flops_proxy = (
@@ -632,7 +749,11 @@ def _hierarchical_search(
             block_outputs_override=next_outputs,
             hierarchy_level=len(lineage),
             hierarchy_notes=notes,
+            trace_path="root" if not lineage else "root/" + "/".join(lineage),
         )
+
+        for tr in flat_next.hierarchy_traces:
+            trace_map[str(tr.get("path", f"level{len(lineage)}"))] = tr
 
         if best_result is None or flat_next.total_edp < best_result.total_edp:
             best_result = flat_next
@@ -654,6 +775,7 @@ def _hierarchical_search(
     assert best_result is not None
     best_result.hierarchy_notes = notes
     best_result.hierarchy_level = len(lineage)
+    best_result.hierarchy_traces = [trace_map[k] for k in sorted(trace_map.keys())]
     return best_result
 
 
@@ -683,4 +805,5 @@ def search_schedule(
         config=config,
         hierarchy_level=0,
         hierarchy_notes=[],
+        trace_path="root",
     )

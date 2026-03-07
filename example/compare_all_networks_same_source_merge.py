@@ -2,9 +2,11 @@
 
 import argparse
 import csv
+import json
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
-import multiprocessing as mp
 from pathlib import Path
 import sys
 
@@ -61,13 +63,10 @@ OFFICIAL_STAGE_LAYOUTS: dict[str, list[tuple[str, int]]] = {
         ("5x Inception-ResNet-C", 30),
         ("head", 3),
     ],
-    # llm.cpp official list in visualization is block variants; use BERT_block view.
     "llm": [("word_embed", 1), ("1x transformer block", 42), ("proj", 1)],
     "pnasnet": [("conv0", 1), ("stem1", 43), ("stem2", 45), ("12x cells", 511), ("head", 3)],
-    # official_specs "resnet" mapped to resnet50 in visualization.
     "resnet": [("stem", 2), ("stage2", 13), ("stage3", 17), ("stage4", 25), ("stage5", 13), ("head", 2)],
     "transformer": [("word_embed_enc", 1), ("6x encoder", 162), ("word_embed_dec", 1), ("6x decoder", 306), ("proj", 1)],
-    # official_specs "vgg" mapped to vgg19 in visualization.
     "vgg": [("conv1..conv16", 16), ("pool1..pool5", 5)],
     "zfnet": [("conv+pool", 8), ("fc1..fc3", 3)],
 }
@@ -216,8 +215,7 @@ def _cfg(
     )
 
 
-def _worker_run(
-    queue: mp.Queue,
+def _compute_one(
     network: str,
     mode: str,
     spec: dict,
@@ -228,71 +226,88 @@ def _worker_run(
     hierarchy_depth: int,
     hierarchy_iters: int,
     hierarchy_theta: float,
-) -> None:
+) -> dict:
+    layout = _layout_for_network(network)
+    min_blocks = _build_min_layers(spec["layers"], layout)
+    if mode == "stage_level":
+        blocks = _build_stage_blocks_from_min_layers(min_blocks, layout)
+    elif mode == "layer_level":
+        blocks = min_blocks
+    else:
+        raise ValueError(f"unknown mode={mode}")
+
+    cfg = _cfg(
+        batch_size=int(spec["batch_size"]),
+        num_pes=num_pes,
+        max_layers_per_block=max_layers_per_block,
+        use_paper_hw_7_2=use_paper_hw_7_2,
+        hierarchical=hierarchical,
+        hierarchy_depth=hierarchy_depth,
+        hierarchy_iters=hierarchy_iters,
+        hierarchy_theta=hierarchy_theta,
+    )
+    res = search_schedule(blocks, cfg)
+
+    return {
+        "ok": True,
+        "status": "ok",
+        "error": "",
+        "input_blocks": len(blocks),
+        "scheduled_blocks": len(res.scheduled_blocks),
+        "num_states": len(res.state_order),
+        "best_sub_batch": res.best_sub_batch,
+        "latency": res.total_latency,
+        "energy": res.total_energy,
+        "edp": res.total_edp,
+        "sct_solver": res.sct_solver_name,
+        "met_solver": res.met_solver_name,
+        "hierarchy_note_count": len(res.hierarchy_notes),
+    }
+
+
+def _run_single_and_dump(args: argparse.Namespace) -> int:
     try:
-        layout = _layout_for_network(network)
-        min_blocks = _build_min_layers(spec["layers"], layout)
-        if mode == "stage_level":
-            blocks = _build_stage_blocks_from_min_layers(min_blocks, layout)
-        elif mode == "layer_level":
-            blocks = min_blocks
-        else:
-            raise ValueError(f"unknown mode={mode}")
-
-        cfg = _cfg(
-            batch_size=int(spec["batch_size"]),
-            num_pes=num_pes,
-            max_layers_per_block=max_layers_per_block,
-            use_paper_hw_7_2=use_paper_hw_7_2,
-            hierarchical=hierarchical,
-            hierarchy_depth=hierarchy_depth,
-            hierarchy_iters=hierarchy_iters,
-            hierarchy_theta=hierarchy_theta,
-        )
-        res = search_schedule(blocks, cfg)
-
-        queue.put(
-            {
-                "ok": True,
-                "status": "ok",
-                "error": "",
-                "input_blocks": len(blocks),
-                "scheduled_blocks": len(res.scheduled_blocks),
-                "num_states": len(res.state_order),
-                "best_sub_batch": res.best_sub_batch,
-                "latency": res.total_latency,
-                "energy": res.total_energy,
-                "edp": res.total_edp,
-                "sct_solver": res.sct_solver_name,
-                "met_solver": res.met_solver_name,
-                "hierarchy_note_count": len(res.hierarchy_notes),
-            }
+        specs = official_specs()
+        spec = specs[str(args.single_network)]
+        data = _compute_one(
+            network=str(args.single_network),
+            mode=str(args.single_mode),
+            spec=spec,
+            num_pes=int(args.num_pes),
+            max_layers_per_block=int(args.max_layers_per_block),
+            use_paper_hw_7_2=bool(args.paper_hw_7_2),
+            hierarchical=bool(args.hierarchical),
+            hierarchy_depth=int(args.hier_depth),
+            hierarchy_iters=int(args.hier_iters),
+            hierarchy_theta=float(args.hier_theta),
         )
     except Exception as exc:
-        queue.put(
-            {
-                "ok": False,
-                "status": "error",
-                "error": str(exc),
-                "input_blocks": 0,
-                "scheduled_blocks": 0,
-                "num_states": 0,
-                "best_sub_batch": 0,
-                "latency": 0.0,
-                "energy": 0.0,
-                "edp": 0.0,
-                "sct_solver": "",
-                "met_solver": "",
-                "hierarchy_note_count": 0,
-            }
-        )
+        data = {
+            "ok": False,
+            "status": "error",
+            "error": str(exc),
+            "input_blocks": 0,
+            "scheduled_blocks": 0,
+            "num_states": 0,
+            "best_sub_batch": 0,
+            "latency": 0.0,
+            "energy": 0.0,
+            "edp": 0.0,
+            "sct_solver": "",
+            "met_solver": "",
+            "hierarchy_note_count": 0,
+        }
+
+    out_path = Path(str(args.single_out))
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return 0
 
 
 def _run_one_with_timeout(
     network: str,
     source_ref: str,
     batch_size: int,
-    spec: dict,
     mode: str,
     details_dir: Path,
     num_pes: int,
@@ -304,29 +319,37 @@ def _run_one_with_timeout(
     hierarchy_iters: int,
     hierarchy_theta: float,
 ) -> RunOutcome:
-    q: mp.Queue = mp.Queue()
-    p = mp.Process(
-        target=_worker_run,
-        args=(
-            q,
-            network,
-            mode,
-            spec,
-            num_pes,
-            max_layers_per_block,
-            use_paper_hw_7_2,
-            hierarchical,
-            hierarchy_depth,
-            hierarchy_iters,
-            hierarchy_theta,
-        ),
-    )
-    p.start()
-    p.join(timeout=timeout_sec)
+    temp_json = Path(tempfile.gettempdir()) / f"crane_single_{network}_{mode}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.json"
 
-    if p.is_alive():
-        p.terminate()
-        p.join(timeout=5)
+    cmd = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--single-run",
+        "--single-network",
+        str(network),
+        "--single-mode",
+        str(mode),
+        "--single-out",
+        str(temp_json),
+        "--num-pes",
+        str(num_pes),
+        "--max-layers-per-block",
+        str(max_layers_per_block),
+        "--hier-depth",
+        str(hierarchy_depth),
+        "--hier-iters",
+        str(hierarchy_iters),
+        "--hier-theta",
+        str(hierarchy_theta),
+    ]
+    if use_paper_hw_7_2:
+        cmd.append("--paper-hw-7-2")
+    if hierarchical:
+        cmd.append("--hierarchical")
+
+    try:
+        cp = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec)
+    except subprocess.TimeoutExpired:
         detail = details_dir / f"{network}__{mode}.txt"
         with detail.open("w", encoding="utf-8", newline="\n") as f:
             f.write(f"network={network}\n")
@@ -341,7 +364,6 @@ def _run_one_with_timeout(
             f.write(f"hierarchy_theta={hierarchy_theta}\n")
             f.write("status=timeout\n")
             f.write(f"timeout_sec={timeout_sec}\n")
-
         return RunOutcome(
             network=network,
             mode=mode,
@@ -362,7 +384,7 @@ def _run_one_with_timeout(
             error=f"timeout after {timeout_sec}s",
         )
 
-    if q.empty():
+    if cp.returncode != 0:
         return RunOutcome(
             network=network,
             mode=mode,
@@ -380,10 +402,36 @@ def _run_one_with_timeout(
             hierarchy_note_count=0,
             ok=False,
             status="error",
-            error="worker exited without result",
+            error=f"single-run process failed: {cp.stderr.strip()[:400]}",
         )
 
-    data = q.get()
+    if not temp_json.exists():
+        return RunOutcome(
+            network=network,
+            mode=mode,
+            source_ref=source_ref,
+            batch_size=batch_size,
+            input_blocks=0,
+            scheduled_blocks=0,
+            num_states=0,
+            best_sub_batch=0,
+            latency=0.0,
+            energy=0.0,
+            edp=0.0,
+            sct_solver="",
+            met_solver="",
+            hierarchy_note_count=0,
+            ok=False,
+            status="error",
+            error="single-run output json missing",
+        )
+
+    data = json.loads(temp_json.read_text(encoding="utf-8"))
+    try:
+        temp_json.unlink(missing_ok=True)
+    except Exception:
+        pass
+
     detail = details_dir / f"{network}__{mode}.txt"
     with detail.open("w", encoding="utf-8", newline="\n") as f:
         f.write(f"network={network}\n")
@@ -444,7 +492,16 @@ def main() -> None:
     parser.add_argument("--hier-depth", type=int, default=2)
     parser.add_argument("--hier-iters", type=int, default=3)
     parser.add_argument("--hier-theta", type=float, default=0.02)
+
+    parser.add_argument("--single-run", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--single-network", type=str, default="", help=argparse.SUPPRESS)
+    parser.add_argument("--single-mode", type=str, default="", help=argparse.SUPPRESS)
+    parser.add_argument("--single-out", type=str, default="", help=argparse.SUPPRESS)
+
     args = parser.parse_args()
+
+    if bool(args.single_run):
+        raise SystemExit(_run_single_and_dump(args))
 
     num_pes = int(args.num_pes)
     timeout_sec = max(10, int(args.timeout_sec))
@@ -471,7 +528,6 @@ def main() -> None:
                 network=name,
                 source_ref=str(spec["source_ref"]),
                 batch_size=int(spec["batch_size"]),
-                spec=spec,
                 mode="stage_level",
                 details_dir=details_dir,
                 num_pes=num_pes,
@@ -489,7 +545,6 @@ def main() -> None:
                 network=name,
                 source_ref=str(spec["source_ref"]),
                 batch_size=int(spec["batch_size"]),
-                spec=spec,
                 mode="layer_level",
                 details_dir=details_dir,
                 num_pes=num_pes,

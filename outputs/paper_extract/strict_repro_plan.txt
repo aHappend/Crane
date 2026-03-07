@@ -1,19 +1,21 @@
-﻿strict_reproduction_status=started
+﻿strict_reproduction_status=in_progress
+last_update=2026-03-07
 
 [done_now]
 1=Section7.2 hardware parameters and unit mapping connected to SearchConfig
 2=Latency and energy formulas calibrated to Eq.19/Eq.21 style terms
 3=Total latency path switched to max(Lcomp, Ltraffic)
 4=Hierarchical search mode added: block-between + block-inside recursive optimization
-5=Experiment scripts updated with hierarchical flags
+5=Experiment scripts updated with hierarchical flags and timeout-safe subprocess execution
+6=Memory traffic evaluation upgraded from proxy DRAM-live-volume to explicit Dep_C/Dep_S/Dep_D decomposition (evaluation path)
 
 [new_cli_flags]
 compare_transformer_stage_layer_with_merge.py=--hierarchical --hier-depth --hier-iters --hier-theta
 compare_all_networks_same_source_merge.py=--hierarchical --hier-depth --hier-iters --hier-theta --paper-hw-7-2
 
-[next_strict_steps]
-1=Implement explicit Dep_C/Dep_S/Dep_D traffic terms instead of proxy DRAM-live-volume
-2=Implement full Section6 iterative procedure with explicit graph partition and gradual partition loop control
-3=Integrate training path Eq.14/15 with forward/backward/recomputation two-round search (K3/K4)
+[pending_for_strict]
+1=Use explicit Dep_C/Dep_S/Dep_D in MeT optimization objective (currently used in evaluation path)
+2=Implement full Section6 graph partition + gradual partition control loop exactly
+3=Integrate training path Eq.14/15 with forward/backward/recomputation and K3/K4 candidate reduction
 4=Connect intra-layer evaluator alpha/beta/gamma plugin path and calibration hooks
 5=Build validation pipeline against SET/zsim/DRAMsim2 references (Section7.1 style)

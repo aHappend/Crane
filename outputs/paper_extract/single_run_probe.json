@@ -1,0 +1,1 @@
+{"ok": true, "status": "ok", "error": "", "input_blocks": 5, "scheduled_blocks": 5, "num_states": 9, "best_sub_batch": 16, "latency": 0.011814423231739691, "energy": 0.0065265383572153295, "edp": 7.710728639032498e-05, "sct_solver": "ortools-scip", "met_solver": "ortools-scip", "hierarchy_note_count": 5}
