@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
 
 from example.run_transformer_min_layer_block_experiment import build_transformer_min_layers
 from scheduler.block import Block
+from scheduler.hardware_profile import paper_7_2_search_params
 from search.scheduler_search import SearchConfig, SearchResult, search_schedule
 
 
@@ -59,13 +60,24 @@ def build_stage_blocks_from_min_layers(min_layer_blocks: Sequence[Block], num_st
     return blocks
 
 
-def _cfg(num_pes: int) -> SearchConfig:
-    # Keep constraints identical for stage/layer and avoid extra heuristic caps.
+def _cfg(
+    num_pes: int,
+    use_paper_hw_7_2: bool,
+    top_k1_ratio: float,
+    top_k2_ratio: float,
+    all_sub_batch_factors: bool,
+    verbose_progress: bool,
+    progress_prefix: str,
+) -> SearchConfig:
+    hw_kwargs: dict[str, float] = {}
+    if use_paper_hw_7_2:
+        hw_kwargs = paper_7_2_search_params(num_pes=num_pes, dram_capacity_mb=30000.0)
+
     return SearchConfig(
         batch_size=128,
         candidate_sub_batches=[4, 8, 16, 32],
-        sram_capacity=15000.0,
-        dram_capacity=30000.0,
+        sram_capacity=float(hw_kwargs.get("sram_capacity", 15000.0)),
+        dram_capacity=float(hw_kwargs.get("dram_capacity", 30000.0)),
         num_pes=num_pes,
         enable_chain_block_merge=True,
         max_layers_per_block=16,
@@ -76,9 +88,21 @@ def _cfg(num_pes: int) -> SearchConfig:
         strict_paper_mode=True,
         top_k1=4,
         top_k2=2,
+        top_k1_ratio=top_k1_ratio,
+        top_k2_ratio=top_k2_ratio,
+        use_all_sub_batch_factors=all_sub_batch_factors,
         use_edp_objective=True,
         dependency_gap=0,
         allow_solver_fallback=False,
+        verbose_progress=verbose_progress,
+        progress_prefix=progress_prefix,
+        noc_bandwidth=float(hw_kwargs.get("noc_bandwidth", 4096.0)),
+        dram_bandwidth=float(hw_kwargs.get("dram_bandwidth", 4096.0)),
+        noc_energy_per_unit=float(hw_kwargs.get("noc_energy_per_unit", 0.0)),
+        dram_energy_per_unit=float(hw_kwargs.get("dram_energy_per_unit", 0.0075)),
+        dram_noc_hops=float(hw_kwargs.get("dram_noc_hops", 1.0)),
+        compute_power_per_tile=float(hw_kwargs.get("compute_power_per_tile", 1.0)),
+        compute_energy_per_op=float(hw_kwargs.get("compute_energy_per_op", 1e-12)),
     )
 
 
@@ -151,6 +175,11 @@ def _write_detail(path: Path, case: CaseResult) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compare transformer stage vs layer granularity under same constraints")
     parser.add_argument("--num-pes", type=int, default=4)
+    parser.add_argument("--paper-hw-7-2", action="store_true", help="use paper Section 7.2 hardware profile")
+    parser.add_argument("--top-k1-ratio", type=float, default=0.1)
+    parser.add_argument("--top-k2-ratio", type=float, default=0.05)
+    parser.add_argument("--all-sub-batch-factors", action="store_true", help="enumerate all factors of batch size for BS_sub")
+    parser.add_argument("--verbose-progress", action="store_true", help="print live solver progress from scheduler")
     args = parser.parse_args()
 
     if args.num_pes <= 0:
@@ -159,8 +188,36 @@ def main() -> None:
     min_layer_blocks = build_transformer_min_layers()
     stage_blocks = build_stage_blocks_from_min_layers(min_layer_blocks, num_stages=8)
 
-    stage_cfg = _cfg(args.num_pes)
-    layer_cfg = _cfg(args.num_pes)
+    stage_cfg = _cfg(
+        num_pes=args.num_pes,
+        use_paper_hw_7_2=bool(args.paper_hw_7_2),
+        top_k1_ratio=float(args.top_k1_ratio),
+        top_k2_ratio=float(args.top_k2_ratio),
+        all_sub_batch_factors=bool(args.all_sub_batch_factors),
+        verbose_progress=bool(args.verbose_progress),
+        progress_prefix="stage",
+    )
+    layer_cfg = _cfg(
+        num_pes=args.num_pes,
+        use_paper_hw_7_2=bool(args.paper_hw_7_2),
+        top_k1_ratio=float(args.top_k1_ratio),
+        top_k2_ratio=float(args.top_k2_ratio),
+        all_sub_batch_factors=bool(args.all_sub_batch_factors),
+        verbose_progress=bool(args.verbose_progress),
+        progress_prefix="layer",
+    )
+
+    print(
+        "run_config:",
+        {
+            "num_pes": args.num_pes,
+            "paper_hw_7_2": bool(args.paper_hw_7_2),
+            "top_k1_ratio": float(args.top_k1_ratio),
+            "top_k2_ratio": float(args.top_k2_ratio),
+            "all_sub_batch_factors": bool(args.all_sub_batch_factors),
+            "verbose_progress": bool(args.verbose_progress),
+        },
+    )
 
     stage_result = search_schedule(stage_blocks, stage_cfg)
     layer_result = search_schedule(min_layer_blocks, layer_cfg)
@@ -240,9 +297,19 @@ def main() -> None:
         f.write(f"config.strict_paper_mode={stage_cfg.strict_paper_mode}\n")
         f.write(f"config.top_k1={stage_cfg.top_k1}\n")
         f.write(f"config.top_k2={stage_cfg.top_k2}\n")
+        f.write(f"config.top_k1_ratio={stage_cfg.top_k1_ratio}\n")
+        f.write(f"config.top_k2_ratio={stage_cfg.top_k2_ratio}\n")
+        f.write(f"config.use_all_sub_batch_factors={stage_cfg.use_all_sub_batch_factors}\n")
         f.write(f"config.use_edp_objective={stage_cfg.use_edp_objective}\n")
         f.write(f"config.dependency_gap={stage_cfg.dependency_gap}\n")
         f.write(f"config.allow_solver_fallback={stage_cfg.allow_solver_fallback}\n")
+        f.write(f"config.paper_hw_7_2={bool(args.paper_hw_7_2)}\n")
+        f.write(f"config.noc_bandwidth={stage_cfg.noc_bandwidth}\n")
+        f.write(f"config.dram_bandwidth={stage_cfg.dram_bandwidth}\n")
+        f.write(f"config.noc_energy_per_unit={stage_cfg.noc_energy_per_unit}\n")
+        f.write(f"config.dram_energy_per_unit={stage_cfg.dram_energy_per_unit}\n")
+        f.write(f"config.compute_power_per_tile={stage_cfg.compute_power_per_tile}\n")
+        f.write(f"config.compute_energy_per_op={stage_cfg.compute_energy_per_op}\n")
         f.write(f"raw_layer_count={len(min_layer_blocks)}\n")
         f.write(f"stage_input_blocks={len(stage_blocks)}\n")
         f.write(f"layer_input_blocks={len(min_layer_blocks)}\n")
@@ -250,8 +317,8 @@ def main() -> None:
         f.write(f"layer_edp={layer_edp:.6f}\n")
         f.write(f"better_mode={better}\n")
         f.write(f"edp_ratio_stage_over_layer={ratio:.6f}\n")
-        f.write(f"stage_detail={out_dir / 'stage_level_detail.txt'}\n")
-        f.write(f"layer_detail={out_dir / 'layer_level_detail.txt'}\n")
+        f.write("stage_detail=stage_level_detail.txt\n")
+        f.write("layer_detail=layer_level_detail.txt\n")
 
     print(f"out_dir={out_dir}")
     print(f"summary_txt={summary_txt}")
@@ -262,3 +329,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
