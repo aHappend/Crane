@@ -35,7 +35,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\.venv"
+VIRTUAL_ENV="C:\Users\Happend Outerwall\OneDrive\NJUonline\Crane\.venv"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"

@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set VIRTUAL_ENV=C:\Users\Happend Outerwall\OneDrive\南京大学在线\Crane\.venv
+set VIRTUAL_ENV=C:\Users\Happend Outerwall\OneDrive\NJUonline\Crane\.venv
 
 if not defined PROMPT set PROMPT=$P$G
 

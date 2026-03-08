@@ -137,6 +137,8 @@ def _integer_tile_allocation(
 def _state_cost_coeffs(
     block_flops: Sequence[float],
     block_map_dims: Sequence[Sequence[float]] | None,
+    block_unit_latency_override: Sequence[float | None] | None,
+    block_unit_energy_override: Sequence[float | None] | None,
     num_states: int,
     num_pes: int,
     compute_power_per_tile: float,
@@ -159,6 +161,18 @@ def _state_cost_coeffs(
         per_block_energy: list[float] = []
 
         for local_idx, j in enumerate(active):
+            if (
+                block_unit_latency_override is not None
+                and block_unit_energy_override is not None
+                and j < len(block_unit_latency_override)
+                and j < len(block_unit_energy_override)
+                and block_unit_latency_override[j] is not None
+                and block_unit_energy_override[j] is not None
+            ):
+                per_block_latency.append(max(0.0, float(block_unit_latency_override[j])))
+                per_block_energy.append(max(0.0, float(block_unit_energy_override[j])))
+                continue
+
             tiles = max(1, int(alloc[local_idx]))
             dims = (
                 [float(v) for v in block_map_dims[j]]
@@ -204,6 +218,8 @@ def _solve_with_ortools(
     block_flops: Sequence[float],
     block_outputs: Sequence[float],
     block_map_dims: Sequence[Sequence[float]] | None,
+    block_unit_latency_override: Sequence[float | None] | None,
+    block_unit_energy_override: Sequence[float | None] | None,
     total_sub_batches: int,
     block_dependencies: Iterable[tuple[int, int]],
     num_pes: int,
@@ -365,6 +381,8 @@ def _solve_with_ortools(
     lat_coeff, ene_coeff = _state_cost_coeffs(
         block_flops=block_flops,
         block_map_dims=block_map_dims,
+        block_unit_latency_override=block_unit_latency_override,
+        block_unit_energy_override=block_unit_energy_override,
         num_states=num_states,
         num_pes=num_pes,
         compute_power_per_tile=compute_power_per_tile,
@@ -421,6 +439,8 @@ def _solve_fallback(
     block_flops: Sequence[float],
     block_outputs: Sequence[float],
     block_map_dims: Sequence[Sequence[float]] | None,
+    block_unit_latency_override: Sequence[float | None] | None,
+    block_unit_energy_override: Sequence[float | None] | None,
     total_sub_batches: int,
     num_pes: int,
     weight_latency: float,
@@ -439,6 +459,8 @@ def _solve_fallback(
     lat_coeff, ene_coeff = _state_cost_coeffs(
         block_flops=block_flops,
         block_map_dims=block_map_dims,
+        block_unit_latency_override=block_unit_latency_override,
+        block_unit_energy_override=block_unit_energy_override,
         num_states=num_states,
         num_pes=num_pes,
         compute_power_per_tile=compute_power_per_tile,
@@ -480,6 +502,8 @@ def optimize_sct_table(
     compute_power_per_tile: float = 1.0,
     energy_per_op: float = 1e-12,
     block_map_dims: Sequence[Sequence[float]] | None = None,
+    block_unit_latency_override: Sequence[float | None] | None = None,
+    block_unit_energy_override: Sequence[float | None] | None = None,
     allow_fallback: bool = True,
     final_counts_per_block: Sequence[int] | None = None,
     initial_counts_per_block: Sequence[int] | None = None,
@@ -489,13 +513,14 @@ def optimize_sct_table(
     if pywraplp is None:
         if not allow_fallback:
             raise RuntimeError("OR-Tools is unavailable and fallback is disabled")
-        # Fallback path only supports canonical equal-final-count ScT.
         if final_counts_per_block is not None or initial_counts_per_block is not None or state_count_lower_bounds is not None or state_count_upper_bounds is not None:
             raise RuntimeError("fallback does not support custom block final/initial counts")
         return _solve_fallback(
             block_flops,
             block_outputs,
             block_map_dims,
+            block_unit_latency_override,
+            block_unit_energy_override,
             total_sub_batches,
             num_pes,
             weight_latency,
@@ -511,6 +536,8 @@ def optimize_sct_table(
             block_flops,
             block_outputs,
             block_map_dims,
+            block_unit_latency_override,
+            block_unit_energy_override,
             total_sub_batches,
             block_dependencies,
             num_pes,
@@ -538,6 +565,8 @@ def optimize_sct_table(
             block_flops,
             block_outputs,
             block_map_dims,
+            block_unit_latency_override,
+            block_unit_energy_override,
             total_sub_batches,
             num_pes,
             weight_latency,
