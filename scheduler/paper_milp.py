@@ -436,6 +436,8 @@ def _solve_with_ortools(
         block_map_dims=block_map_dims,
         block_unit_latency_override=block_unit_latency_override,
         block_unit_energy_override=block_unit_energy_override,
+        state_block_latency_override=state_block_latency_override,
+        state_block_energy_override=state_block_energy_override,
         num_states=num_states,
         num_pes=num_pes,
         compute_power_per_tile=compute_power_per_tile,
@@ -494,6 +496,8 @@ def _solve_fallback(
     block_map_dims: Sequence[Sequence[float]] | None,
     block_unit_latency_override: Sequence[float | None] | None,
     block_unit_energy_override: Sequence[float | None] | None,
+    state_block_latency_override: Sequence[Sequence[float | None]] | None,
+    state_block_energy_override: Sequence[Sequence[float | None]] | None,
     total_sub_batches: int,
     num_pes: int,
     weight_latency: float,
@@ -514,6 +518,8 @@ def _solve_fallback(
         block_map_dims=block_map_dims,
         block_unit_latency_override=block_unit_latency_override,
         block_unit_energy_override=block_unit_energy_override,
+        state_block_latency_override=state_block_latency_override,
+        state_block_energy_override=state_block_energy_override,
         num_states=num_states,
         num_pes=num_pes,
         compute_power_per_tile=compute_power_per_tile,
@@ -557,6 +563,8 @@ def optimize_sct_table(
     block_map_dims: Sequence[Sequence[float]] | None = None,
     block_unit_latency_override: Sequence[float | None] | None = None,
     block_unit_energy_override: Sequence[float | None] | None = None,
+    state_block_latency_override: Sequence[Sequence[float | None]] | None = None,
+    state_block_energy_override: Sequence[Sequence[float | None]] | None = None,
     allow_fallback: bool = True,
     final_counts_per_block: Sequence[int] | None = None,
     initial_counts_per_block: Sequence[int] | None = None,
@@ -574,6 +582,8 @@ def optimize_sct_table(
             block_map_dims,
             block_unit_latency_override,
             block_unit_energy_override,
+            state_block_latency_override,
+            state_block_energy_override,
             total_sub_batches,
             num_pes,
             weight_latency,
@@ -591,6 +601,8 @@ def optimize_sct_table(
             block_map_dims,
             block_unit_latency_override,
             block_unit_energy_override,
+            state_block_latency_override,
+            state_block_energy_override,
             total_sub_batches,
             block_dependencies,
             num_pes,
@@ -620,6 +632,8 @@ def optimize_sct_table(
             block_map_dims,
             block_unit_latency_override,
             block_unit_energy_override,
+            state_block_latency_override,
+            state_block_energy_override,
             total_sub_batches,
             num_pes,
             weight_latency,
@@ -629,6 +643,11 @@ def optimize_sct_table(
             compute_power_per_tile,
             energy_per_op,
         )
+
+
+
+
+
 
 
 
