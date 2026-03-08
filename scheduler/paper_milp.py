@@ -466,7 +466,6 @@ def _solve_fallback(
 def optimize_sct_table(
     block_flops: Sequence[float],
     block_outputs: Sequence[float],
-    block_map_dims: Sequence[Sequence[float]] | None = None,
     total_sub_batches: int,
     block_dependencies: Iterable[tuple[int, int]],
     num_pes: int,
@@ -480,6 +479,7 @@ def optimize_sct_table(
     dependency_gap: int = 0,
     compute_power_per_tile: float = 1.0,
     energy_per_op: float = 1e-12,
+    block_map_dims: Sequence[Sequence[float]] | None = None,
     allow_fallback: bool = True,
     final_counts_per_block: Sequence[int] | None = None,
     initial_counts_per_block: Sequence[int] | None = None,
@@ -547,14 +547,3 @@ def optimize_sct_table(
             compute_power_per_tile,
             energy_per_op,
         )
-
-
-
-
-
-
-
-
-
-
-

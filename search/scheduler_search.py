@@ -61,6 +61,7 @@ class SearchConfig:
 
     # Hierarchical optimization (Section 6 style).
     enable_hierarchical_pipeline: bool = False
+    derive_recursive_traces: bool = True
     max_hierarchy_depth: int = 2
     max_hierarchy_iters: int = 3
     hierarchy_theta: float = 0.02
@@ -426,6 +427,7 @@ def _build_result_from_candidate(
                 "state_order": list(state_order),
                 "state_categories": list(categories),
                 "state_batches": list(candidate.sct_opt.state_workloads),
+                "state_active_blocks": [list(x) for x in state_active_blocks],
                 "sct": candidate.sct_opt.sct.table.tolist(),
                 "met_s": candidate.met_opt.table.sram.tolist(),
                 "met_d": candidate.met_opt.table.dram.tolist(),
@@ -552,6 +554,87 @@ def _candidate_child_expansions(
         scored = scored[: max(1, int(max_trials))]
     return [(i, children) for _, i, children in scored]
 
+def _derive_recursive_intra_block_traces(
+    parent_blocks: Sequence[Block],
+    parent_result: SearchResult,
+    config: SearchConfig,
+    depth_remaining: int,
+    lineage: list[str],
+) -> tuple[list[dict[str, object]], list[str]]:
+    if depth_remaining <= 0:
+        return [], []
+
+    total_parent_flops = sum(max(1e-9, float(b.total_flops())) for b in parent_blocks)
+    traces: list[dict[str, object]] = []
+    notes: list[str] = []
+
+    for bi, block in enumerate(parent_blocks):
+        children = _child_blocks_from_block(block)
+        if len(children) < 2:
+            continue
+
+        share = max(1e-6, float(block.total_flops()) / max(1e-9, total_parent_flops))
+        child_cfg = _child_cfg(config, share=share, child_count=len(children))
+        child_cfg = replace(
+            child_cfg,
+            candidate_sub_batches=[int(parent_result.best_sub_batch)],
+            use_all_sub_batch_factors=False,
+            strict_paper_mode=False,
+            top_k1=1,
+            top_k2=1,
+            top_k1_ratio=0.0,
+            top_k2_ratio=0.0,
+            enable_hierarchical_pipeline=False,
+            derive_recursive_traces=False,
+            enable_structure_refinement=False,
+            enable_chain_block_merge=False,
+            max_hierarchy_depth=max(1, depth_remaining),
+        )
+
+        child_deps = _derive_or_default_dependencies(children)
+        block_slug = f"{bi:02d}_{block.name}"
+        child_path = "root/" + "/".join([*lineage, block_slug]) if lineage else f"root/{block_slug}"
+
+        try:
+            child_res = _flat_search_prepared(
+                work_blocks=children,
+                block_deps=child_deps,
+                config=child_cfg,
+                hierarchy_level=len(lineage) + 1,
+                hierarchy_notes=[],
+                trace_path=child_path,
+            )
+        except Exception as exc:
+            notes.append(
+                f"recursive_trace_failed parent={block.name} children={len(children)} reason={exc}"
+            )
+            continue
+
+        for trace in child_res.hierarchy_traces:
+            trace["parent_block"] = block.name
+            trace["derived_mode"] = "intra_block"
+            trace["assumed_num_pes"] = int(child_cfg.num_pes)
+            trace["assumed_pe_share"] = float(share)
+            traces.append(trace)
+
+        notes.append(
+            f"recursive_trace_ok parent={block.name} children={len(children)} "
+            f"assumed_pes={child_cfg.num_pes} best_sub_batch={child_res.best_sub_batch}"
+        )
+
+        grand_traces, grand_notes = _derive_recursive_intra_block_traces(
+            parent_blocks=children,
+            parent_result=child_res,
+            config=child_cfg,
+            depth_remaining=depth_remaining - 1,
+            lineage=[*lineage, block_slug],
+        )
+        traces.extend(grand_traces)
+        notes.extend(grand_notes)
+
+    return traces, notes
+
+
 def _flat_search_prepared(
     work_blocks: Sequence[Block],
     block_deps: Sequence[tuple[int, int]],
@@ -644,6 +727,7 @@ def _flat_search_prepared(
             sct_opt = optimize_sct_table(
                 block_flops=block_flops,
                 block_outputs=block_outputs,
+                block_map_dims=block_map_dims,
                 total_sub_batches=total_sub_batches,
                 block_dependencies=block_deps,
                 num_pes=config.num_pes,
@@ -779,7 +863,7 @@ def _flat_search_prepared(
     best_total_energy = best_cand.compute_energy + best_cand.memory_energy
     _progress(config, f"[Final] best sub_batch={best_cand.sub_batch} total_latency={best_total_latency:.6e} total_energy={best_total_energy:.6e} total_edp={edp(best_total_latency, best_total_energy):.6e}")
 
-    return _build_result_from_candidate(
+    result = _build_result_from_candidate(
         candidate=best_cand,
         block_names=block_names,
         block_deps=list(block_deps),
@@ -792,6 +876,23 @@ def _flat_search_prepared(
         hierarchy_notes=hierarchy_notes,
         trace_path=trace_path,
     )
+
+    depth_budget = max(0, int(config.max_hierarchy_depth) - int(hierarchy_level) - 1)
+    if bool(config.derive_recursive_traces) and depth_budget > 0:
+        trace_lineage = [] if not trace_path or trace_path == "root" else [p for p in str(trace_path).split("/") if p and p != "root"]
+        extra_traces, extra_notes = _derive_recursive_intra_block_traces(
+            parent_blocks=work_blocks,
+            parent_result=result,
+            config=config,
+            depth_remaining=depth_budget,
+            lineage=trace_lineage,
+        )
+        if extra_traces:
+            result.hierarchy_traces = list(result.hierarchy_traces) + extra_traces
+        if extra_notes:
+            result.hierarchy_notes = list(result.hierarchy_notes) + extra_notes
+
+    return result
 
 
 def _hierarchical_search(
@@ -1388,4 +1489,6 @@ def search_schedule(
         hierarchy_notes=[],
         trace_path="root",
     )
+
+
 

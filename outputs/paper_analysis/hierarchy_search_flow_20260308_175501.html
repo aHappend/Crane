@@ -1,0 +1,81 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Crane Paper Hierarchy Search Flow</title>
+  <style>
+    body { font-family: Segoe UI, Microsoft YaHei, sans-serif; margin: 32px; line-height: 1.6; color: #1f2937; background: #f8fafc; }
+    h1, h2 { color: #111827; }
+    .card { background: #ffffff; border: 1px solid #d1d5db; border-radius: 12px; padding: 20px 24px; margin: 16px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.04); }
+    .flow { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 12px; }
+    .step { background: #eff6ff; border-left: 6px solid #2563eb; padding: 14px 16px; border-radius: 8px; }
+    code { background: #eef2f7; padding: 2px 6px; border-radius: 6px; }
+    pre { background: #111827; color: #f9fafb; padding: 16px; border-radius: 10px; overflow-x: auto; }
+    ul { margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Crane: Hierarchical Block Search</h1>
+
+  <div class="card">
+    <h2>Core Point</h2>
+    <p>The paper does not directly optimize a single number called <code>depth</code>. It optimizes a hierarchical block structure <code>H</code> plus state workloads <code>{s_i}</code>. Depth is only a by-product of the chosen hierarchy tree.</p>
+  </div>
+
+  <div class="card">
+    <h2>Hierarchy Tree</h2>
+    <pre>Top block
+  -> Block A
+     -> Sub-block A1
+        -> Layer 1
+        -> Layer 2
+     -> Sub-block A2
+        -> Layer 3
+  -> Block B
+     -> Layer 4
+     -> Layer 5</pre>
+    <p>Different branches can stop at different depths. Therefore there is no single global best depth like 2 or 3. The true object being optimized is the tree <code>H</code>.</p>
+  </div>
+
+  <div class="card">
+    <h2>Per-Level State Derivation</h2>
+    <p>For any composite block with <code>N</code> direct children, the paper derives <code>2N-1</code> states and constructs <code>ScT</code> and <code>MeT</code> for that block. If one child is still composite, the same procedure can be recursively applied again inside it.</p>
+  </div>
+
+  <div class="card">
+    <h2>Search Flow</h2>
+    <div class="flow">
+      <div class="step"><strong>Step A.</strong> Start from a coarse hierarchy and optimize schedule on it.</div>
+      <div class="step"><strong>Step B.</strong> Pick a block and partition it into finer children.</div>
+      <div class="step"><strong>Step C.</strong> Rebuild states, ScT, and MeT for the refined hierarchy.</div>
+      <div class="step"><strong>Step D.</strong> Recompute latency, energy, and EDP.</div>
+      <div class="step"><strong>Step E.</strong> Keep the refined hierarchy only if it improves cost enough.</div>
+      <div class="step"><strong>Step F.</strong> Repeat until no promising refinement remains.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Why This Finds the Best Depth Indirectly</h2>
+    <ul>
+      <li>A branch that keeps being refined becomes deeper.</li>
+      <li>A branch that stops early stays shallow.</li>
+      <li>The final tree may have mixed depths across branches.</li>
+    </ul>
+    <p>So the paper finds the best depth profile indirectly by finding the best hierarchy tree.</p>
+  </div>
+
+  <div class="card">
+    <h2>What Figure 3 Means</h2>
+    <p>Figure 3 implies that scheduling is hierarchical: there is top-level block scheduling, and inside a block its own children also have pipeline format and derived states. Therefore block-internal pipeline scheduling is part of the method.</p>
+  </div>
+
+  <div class="card">
+    <h2>Current Gap With Our Code</h2>
+    <ul>
+      <li>We already have block-level ScT/MeT and approximate hierarchy refinement.</li>
+      <li>We still do not have the full recursive child-level ScT/MeT derivation required by the paper.</li>
+      <li>So our current implementation is hierarchy-aware, but not yet full paper-grade recursive hierarchy scheduling.</li>
+    </ul>
+  </div>
+</body>
+</html>

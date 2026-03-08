@@ -1,0 +1,132 @@
+﻿Crane Paper: Hierarchical Block Search and How "Depth" Is Determined
+===================================================================
+
+1. What the paper optimizes
+The paper does not optimize a single scalar called "nesting depth".
+It jointly optimizes:
+- H: hierarchical block structure
+- {s_i}: workload assigned to pipeline-derived states inside each block
+
+So the true optimization target is the whole hierarchy tree H plus the scheduling tables built on that tree.
+Depth is only a by-product of H.
+
+2. What a hierarchy means
+A model is represented as a recursive tree:
+- root: top block representing the whole network
+- internal nodes: composite blocks
+- leaves: basic layers
+
+Example:
+Top block
+  -> Block A
+     -> Sub-block A1
+        -> Layer 1
+        -> Layer 2
+     -> Sub-block A2
+        -> Layer 3
+  -> Block B
+     -> Layer 4
+     -> Layer 5
+
+Different branches can have different depths. Therefore, the paper is not searching for one global depth number such as depth=2 or depth=3.
+It is searching for the best hierarchy tree.
+
+3. How states are constructed at each level
+For any composite block B with N direct children:
+- construct 2N-1 pipeline-derived states
+- build ScT_B over these children
+- build MeT_B over these children
+
+If a child is itself composite, the same procedure can be recursively applied inside that child.
+This is the meaning of Figure 3: scheduling and state derivation happen hierarchically.
+
+4. How the paper searches hierarchy
+The paper's logic in Section 6 is cost-driven hierarchical refinement.
+It can be read as the following loop:
+
+Step A. Start from a coarse hierarchy
+- Build a relatively coarse block partition.
+- Optimize schedule on that hierarchy.
+- Compute cost C(H, {s_i}).
+
+Step B. Choose a block to refine
+- Pick a candidate composite block.
+- Partition that block into finer child blocks.
+- This creates a new hierarchy H'.
+
+Step C. Re-optimize schedule on the refined hierarchy
+- Rebuild pipeline-derived states for affected blocks.
+- Recompute ScT and MeT.
+- Recompute latency, energy, and EDP.
+
+Step D. Compare old and new hierarchy
+- If refined hierarchy reduces EDP enough, accept it.
+- Otherwise reject it.
+
+Step E. Repeat
+- Continue refining promising blocks.
+- Stop when no meaningful improvement remains.
+
+5. Why the paper does not need to search an explicit "best depth"
+Because depth is determined by repeated partition decisions.
+Examples:
+- If a branch keeps being refined, its depth increases.
+- If another branch is already good enough, it stops earlier.
+- Final hierarchy may contain mixed depths across different branches.
+
+Therefore:
+- best depth is not a primary variable
+- best hierarchy tree is the primary variable
+- resulting depth profile is induced by the chosen tree
+
+6. What makes a hierarchy better or worse
+A refined hierarchy is good only if the new block structure enables better scheduling tradeoffs, such as:
+- less pipeline bubble
+- better fusion / reuse
+- lower DRAM traffic
+- better sub-batch distribution
+- better recomputation opportunities in training
+
+A deeper hierarchy is not always better.
+More depth increases flexibility, but also increases search complexity and may expose worse local schedules.
+The paper searches for a cost-optimal hierarchy, not a maximally deep hierarchy.
+
+7. Relation to Section 5 and Section 6
+Section 5:
+- intra-block scheduling
+- for a fixed block structure, optimize ScT / MeT / cost
+
+Section 6:
+- hierarchical block construction and optimization
+- change the block structure itself, then call Section 5 scheduling again
+
+So the overall process is:
+Hierarchy candidate H
+  -> intra-block scheduling on H
+  -> evaluate cost
+  -> refine H
+  -> intra-block scheduling again
+  -> evaluate again
+  -> keep the better hierarchy
+
+8. What Figure 3 implies about block-internal scheduling
+Figure 3 means:
+- top-level block scheduling exists
+- inside a block, its own children also have pipeline format and derived states
+- schedule derivation is recursive
+
+So yes, according to the paper, block-internal pipeline scheduling is part of the method.
+
+9. What our current implementation still lacks
+Current code already has:
+- hierarchy-aware block grouping
+- block-level ScT / MeT
+- gradual refinement approximation
+
+Current code still lacks the full paper version of:
+- recursive block-internal ScT / MeT derivation
+- true nested scheduling propagation from parent block to child block
+- full Section 6 hierarchy optimization rather than local approximation
+
+10. One-sentence summary
+The paper finds the "best depth" indirectly by searching for the best hierarchical block tree H through repeated partition, scheduling, evaluation, and refinement; depth is the resulting shape of that tree, not an independently optimized variable.
