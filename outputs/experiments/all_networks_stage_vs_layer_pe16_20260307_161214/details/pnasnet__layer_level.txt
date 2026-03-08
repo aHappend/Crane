@@ -1,8 +1,0 @@
-network=pnasnet
-mode=layer_level
-source_ref=src/nns/pnasnet.cpp
-batch_size=64
-num_pes=16
-target_raw_layers=603
-status=timeout
-timeout_sec=60
