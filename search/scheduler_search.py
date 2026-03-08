@@ -157,6 +157,23 @@ def _resample_monotone_cumulative(
     return out
 
 
+def _anchor_state_indices(num_states: int) -> list[int]:
+    if num_states <= 0:
+        return []
+    if num_states == 1:
+        return [0]
+
+    anchors = {
+        0,
+        num_states - 1,
+    }
+    if num_states >= 3:
+        anchors.add((num_states - 1) // 2)
+    if num_states >= 5:
+        anchors.add((num_states - 1) // 3)
+        anchors.add(((num_states - 1) * 2) // 3)
+    return sorted(anchors)
+
 
 def _derive_child_completion_bounds_from_parent(
     parent_result: SearchResult,
@@ -173,16 +190,32 @@ def _derive_child_completion_bounds_from_parent(
     ]
     target = _resample_monotone_cumulative(parent_cum, child_num_states)
     total = max(0, target[-1] if target else 0)
-    slack = max(1, int(ceil(total * 0.05))) if total > 0 else 0
     lb = _empty_state_int_bounds(child_num_states, child_num_blocks)
     ub = _empty_state_int_bounds(child_num_states, child_num_blocks)
     last_child = child_num_blocks - 1
 
-    for i, val in enumerate(target):
-        lo = max(0, int(val) - slack)
-        hi = min(total, int(val) + slack)
-        lb[i][last_child] = lo
-        ub[i][last_child] = hi
+    if total <= 0:
+        lb[0][last_child] = 0
+        ub[0][last_child] = 0
+        lb[-1][last_child] = 0
+        ub[-1][last_child] = 0
+        return lb, ub
+
+    anchors = _anchor_state_indices(child_num_states)
+    # Keep only a few anchor states coupled to the parent curve. A dense
+    # full-state boundary made long child chains infeasible in practice.
+    base_slack = max(1, int(ceil(total * 0.25)))
+    for idx, state in enumerate(anchors):
+        val = int(target[state])
+        if state == 0 or state == child_num_states - 1:
+            lo = val
+            hi = val
+        else:
+            anchor_slack = base_slack + max(0, idx - 1)
+            lo = max(0, val - anchor_slack)
+            hi = min(total, val + anchor_slack)
+        lb[state][last_child] = lo
+        ub[state][last_child] = hi
 
     lb[0][last_child] = 0
     ub[0][last_child] = 0
@@ -1910,6 +1943,7 @@ def search_schedule(
         hierarchy_notes=[],
         trace_path="root",
     )
+
 
 
 
