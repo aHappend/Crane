@@ -60,6 +60,25 @@ def _normalize_state_bound_matrix(
     return out
 
 
+def _normalize_state_block_float_matrix(
+    name: str,
+    matrix: Sequence[Sequence[float | None]] | None,
+    num_states: int,
+    num_blocks: int,
+) -> list[list[float | None]] | None:
+    if matrix is None:
+        return None
+    if len(matrix) != num_states:
+        raise ValueError(f"{name} row count must equal number of states")
+
+    out: list[list[float | None]] = []
+    for i, row in enumerate(matrix):
+        if len(row) != num_blocks:
+            raise ValueError(f"{name}[{i}] column count must equal number of blocks")
+        out.append([None if v is None else float(v) for v in row])
+    return out
+
+
 def _factorizations4(total_tiles: int) -> list[tuple[int, int, int, int]]:
     total = max(1, int(total_tiles))
     out: list[tuple[int, int, int, int]] = []
@@ -139,6 +158,8 @@ def _state_cost_coeffs(
     block_map_dims: Sequence[Sequence[float]] | None,
     block_unit_latency_override: Sequence[float | None] | None,
     block_unit_energy_override: Sequence[float | None] | None,
+    state_block_latency_override: Sequence[Sequence[float | None]] | None,
+    state_block_energy_override: Sequence[Sequence[float | None]] | None,
     num_states: int,
     num_pes: int,
     compute_power_per_tile: float,
@@ -161,6 +182,20 @@ def _state_cost_coeffs(
         per_block_energy: list[float] = []
 
         for local_idx, j in enumerate(active):
+            if (
+                state_block_latency_override is not None
+                and state_block_energy_override is not None
+                and i < len(state_block_latency_override)
+                and i < len(state_block_energy_override)
+                and j < len(state_block_latency_override[i])
+                and j < len(state_block_energy_override[i])
+                and state_block_latency_override[i][j] is not None
+                and state_block_energy_override[i][j] is not None
+            ):
+                per_block_latency.append(max(0.0, float(state_block_latency_override[i][j])))
+                per_block_energy.append(max(0.0, float(state_block_energy_override[i][j])))
+                continue
+
             if (
                 block_unit_latency_override is not None
                 and block_unit_energy_override is not None
@@ -220,6 +255,8 @@ def _solve_with_ortools(
     block_map_dims: Sequence[Sequence[float]] | None,
     block_unit_latency_override: Sequence[float | None] | None,
     block_unit_energy_override: Sequence[float | None] | None,
+    state_block_latency_override: Sequence[Sequence[float | None]] | None,
+    state_block_energy_override: Sequence[Sequence[float | None]] | None,
     total_sub_batches: int,
     block_dependencies: Iterable[tuple[int, int]],
     num_pes: int,
@@ -269,6 +306,18 @@ def _solve_with_ortools(
         num_states,
         n_blocks,
     )
+    state_lat_overrides = _normalize_state_block_float_matrix(
+        "state_block_latency_override",
+        state_block_latency_override,
+        num_states,
+        n_blocks,
+    )
+    state_ene_overrides = _normalize_state_block_float_matrix(
+        "state_block_energy_override",
+        state_block_energy_override,
+        num_states,
+        n_blocks,
+    )
 
     default_total = int(total_sub_batches)
     per_block_final = [
@@ -289,6 +338,10 @@ def _solve_with_ortools(
     solver = pywraplp.Solver.CreateSolver("SCIP")
     if solver is None:
         raise RuntimeError("OR-Tools SCIP solver is not available")
+    if hasattr(solver, "SetSolverSpecificParametersAsString"):
+        solver.SetSolverSpecificParametersAsString(
+            "display/verblevel = 0\nparallel/maxnthreads = 1\nseparating/gomory/freq = -1\n"
+        )
 
     sct = [[solver.IntVar(0, int(max_final), f"sct_{i}_{j}") for j in range(n_blocks)] for i in range(num_states)]
     w = [solver.IntVar(0, int(max_final), f"w_{i}") for i in range(num_states)]
@@ -576,3 +629,9 @@ def optimize_sct_table(
             compute_power_per_tile,
             energy_per_op,
         )
+
+
+
+
+
+

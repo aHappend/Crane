@@ -152,7 +152,15 @@ def write_detail(path: Path, blocks: list[Block], cand: CandidateResult) -> None
         f.write(f"met_solver={res.met_solver_name}\n")
         f.write(f"latency={res.total_latency:.6f}\n")
         f.write(f"energy={res.total_energy:.6f}\n")
-        f.write(f"edp={res.total_edp:.6f}\n\n")
+        f.write(f"edp={res.total_edp:.6f}\n")
+        f.write(f"hierarchy_trace_count={len(res.hierarchy_traces)}\n")
+        f.write(f"hierarchy_note_count={len(res.hierarchy_notes)}\n\n")
+
+        if res.hierarchy_notes:
+            f.write("hierarchy_notes\n")
+            for line in res.hierarchy_notes:
+                f.write(f"  {line}\n")
+            f.write("\n")
 
         f.write("states\n")
         for i, (sname, cat, ape, sb, act) in enumerate(
@@ -290,5 +298,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 

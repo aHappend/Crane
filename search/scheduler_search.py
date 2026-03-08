@@ -110,6 +110,13 @@ class SearchResult:
     phase_results: dict[str, dict[str, object]] = field(default_factory=dict)
 
 
+def _empty_state_block_override(
+    num_states: int,
+    num_blocks: int,
+) -> list[list[float | None]]:
+    return [[None for _ in range(num_blocks)] for _ in range(num_states)]
+
+
 @dataclass
 class _Candidate:
     sub_batch: int
@@ -509,6 +516,20 @@ def _child_cfg(parent_cfg: SearchConfig, share: float, child_count: int) -> Sear
 
 
 
+
+def _stamp_traces(
+    traces: Sequence[dict[str, object]],
+    *,
+    parent_block: str,
+    derived_mode: str,
+    assumed_num_pes: int,
+    assumed_pe_share: float,
+) -> None:
+    for trace in traces:
+        trace["parent_block"] = parent_block
+        trace["derived_mode"] = derived_mode
+        trace["assumed_num_pes"] = int(assumed_num_pes)
+        trace["assumed_pe_share"] = float(assumed_pe_share)
 def _derive_or_default_dependencies(blocks: Sequence[Block]) -> list[tuple[int, int]]:
     deps = derive_block_dependencies(blocks)
     if not deps and len(blocks) > 1:
@@ -610,11 +631,14 @@ def _derive_recursive_intra_block_traces(
             )
             continue
 
+        _stamp_traces(
+            child_res.hierarchy_traces,
+            parent_block=block.name,
+            derived_mode="intra_block",
+            assumed_num_pes=int(child_cfg.num_pes),
+            assumed_pe_share=float(share),
+        )
         for trace in child_res.hierarchy_traces:
-            trace["parent_block"] = block.name
-            trace["derived_mode"] = "intra_block"
-            trace["assumed_num_pes"] = int(child_cfg.num_pes)
-            trace["assumed_pe_share"] = float(share)
             traces.append(trace)
 
         notes.append(
@@ -707,6 +731,56 @@ def _estimate_block_pe_shares(
     return out
 
 
+
+def _expand_per_subbatch_costs(
+    state_batches: Sequence[int],
+    state_coeffs: Sequence[float],
+) -> list[float]:
+    out: list[float] = []
+    for batch_count, coeff in zip(state_batches, state_coeffs):
+        cnt = max(0, int(batch_count))
+        out.extend([max(0.0, float(coeff)) for _ in range(cnt)])
+    return out
+
+
+
+def _map_child_costs_to_parent_states(
+    parent_result: SearchResult,
+    parent_block_index: int,
+    child_res: SearchResult,
+) -> tuple[list[float | None], list[float | None]]:
+    parent_delta = _delta_matrix(parent_result.sct)
+    parent_counts = [
+        int(round(parent_delta[i][parent_block_index]))
+        for i in range(parent_result.sct.num_states)
+    ]
+    child_lat_seq = _expand_per_subbatch_costs(
+        child_res.milp_solution.state_batches,
+        child_res.state_unit_latency,
+    )
+    child_ene_seq = _expand_per_subbatch_costs(
+        child_res.milp_solution.state_batches,
+        child_res.state_unit_energy,
+    )
+    total_need = sum(max(0, v) for v in parent_counts)
+    if len(child_lat_seq) < total_need or len(child_ene_seq) < total_need:
+        raise RuntimeError('child schedule does not cover parent-assigned sub-batches')
+
+    lat_override: list[float | None] = [None for _ in range(parent_result.sct.num_states)]
+    ene_override: list[float | None] = [None for _ in range(parent_result.sct.num_states)]
+    cursor = 0
+    for i, cnt in enumerate(parent_counts):
+        if cnt <= 0:
+            continue
+        lat_chunk = child_lat_seq[cursor : cursor + cnt]
+        ene_chunk = child_ene_seq[cursor : cursor + cnt]
+        if not lat_chunk or not ene_chunk:
+            raise RuntimeError('failed to map child state costs to parent states')
+        lat_override[i] = float(sum(lat_chunk) / len(lat_chunk))
+        ene_override[i] = float(sum(ene_chunk) / len(ene_chunk))
+        cursor += cnt
+    return lat_override, ene_override
+
 def _recursive_joint_optimize_prepared(
     work_blocks: Sequence[Block],
     block_deps: Sequence[tuple[int, int]],
@@ -728,6 +802,13 @@ def _recursive_joint_optimize_prepared(
         hierarchy_notes=notes,
         trace_path=trace_path,
     )
+    _stamp_traces(
+        current_result.hierarchy_traces,
+        parent_block="ROOT",
+        derived_mode="joint_root",
+        assumed_num_pes=int(config.num_pes),
+        assumed_pe_share=1.0,
+    )
     for tr in current_result.hierarchy_traces:
         trace_map[str(tr.get("path", trace_path or "root"))] = tr
 
@@ -743,6 +824,8 @@ def _recursive_joint_optimize_prepared(
         child_shares = _estimate_block_pe_shares(work_blocks, current_result, max(1, int(config.num_pes)))
         unit_lat_override: list[float | None] = [None for _ in work_blocks]
         unit_ene_override: list[float | None] = [None for _ in work_blocks]
+        state_lat_override = _empty_state_block_override(current_result.sct.num_states, len(work_blocks))
+        state_ene_override = _empty_state_block_override(current_result.sct.num_states, len(work_blocks))
         any_child = False
 
         for bi, block in enumerate(work_blocks):
@@ -780,9 +863,24 @@ def _recursive_joint_optimize_prepared(
             total_sub_batches = max(1, int(config.batch_size // max(1, current_result.best_sub_batch)))
             unit_lat_override[bi] = float(child_res.total_latency) / float(total_sub_batches)
             unit_ene_override[bi] = float(child_res.total_energy) / float(total_sub_batches)
+            parent_state_lat, parent_state_ene = _map_child_costs_to_parent_states(
+                current_result,
+                parent_block_index=bi,
+                child_res=child_res,
+            )
+            for si in range(current_result.sct.num_states):
+                state_lat_override[si][bi] = parent_state_lat[si]
+                state_ene_override[si][bi] = parent_state_ene[si]
             notes.append(
                 f"joint_iter={joint_iter} parent={block.name} children={len(children)} "
                 f"share={child_shares[bi]:.4f} unit_lat={unit_lat_override[bi]:.6e} unit_ene={unit_ene_override[bi]:.6e}"
+            )
+            _stamp_traces(
+                child_res.hierarchy_traces,
+                parent_block=block.name,
+                derived_mode="joint_recursive",
+                assumed_num_pes=int(child_cfg.num_pes),
+                assumed_pe_share=float(child_shares[bi]),
             )
             for tr in child_res.hierarchy_traces:
                 trace_map[str(tr.get('path', child_path))] = tr
@@ -799,6 +897,15 @@ def _recursive_joint_optimize_prepared(
             trace_path=trace_path,
             block_unit_latency_override=unit_lat_override,
             block_unit_energy_override=unit_ene_override,
+            state_block_latency_override=state_lat_override,
+            state_block_energy_override=state_ene_override,
+        )
+        _stamp_traces(
+            refined.hierarchy_traces,
+            parent_block="ROOT",
+            derived_mode="joint_refined",
+            assumed_num_pes=int(config.num_pes),
+            assumed_pe_share=1.0,
         )
         for tr in refined.hierarchy_traces:
             trace_map[str(tr.get("path", trace_path or "root"))] = tr
@@ -831,6 +938,8 @@ def _flat_search_prepared(
     state_count_upper_bounds: Sequence[Sequence[int | None]] | None = None,
     block_unit_latency_override: Sequence[float | None] | None = None,
     block_unit_energy_override: Sequence[float | None] | None = None,
+    state_block_latency_override: Sequence[Sequence[float | None]] | None = None,
+    state_block_energy_override: Sequence[Sequence[float | None]] | None = None,
     enforce_end_dram_dependency: bool = False,
 ) -> SearchResult:
     if not work_blocks:
@@ -913,6 +1022,8 @@ def _flat_search_prepared(
                 block_map_dims=block_map_dims,
                 block_unit_latency_override=block_unit_latency_override,
                 block_unit_energy_override=block_unit_energy_override,
+                state_block_latency_override=state_block_latency_override,
+                state_block_energy_override=state_block_energy_override,
                 total_sub_batches=total_sub_batches,
                 block_dependencies=block_deps,
                 num_pes=config.num_pes,
@@ -1687,3 +1798,16 @@ def search_schedule(
         hierarchy_notes=[],
         trace_path="root",
     )
+
+
+
+
+
+
+
+
+
+
+
+
+
