@@ -960,6 +960,43 @@ def _phase_payload(res: SearchResult) -> dict[str, object]:
     }
 
 
+
+def _training_retention_candidates(total_sub_batches: int) -> list[int]:
+    total = max(0, int(total_sub_batches))
+    if total <= 8:
+        return list(range(0, total + 1))
+
+    vals = {
+        0,
+        1,
+        max(0, total // 4),
+        max(0, total // 2),
+        max(0, (3 * total) // 4),
+        max(0, total - 1),
+        total,
+    }
+    return sorted(v for v in vals if 0 <= v <= total)
+
+
+def _with_memory_override(
+    res: SearchResult,
+    met_opt: MemoryOptimizationResult,
+    memory_latency: float,
+    memory_energy: float,
+    latency_combine_mode: str,
+) -> SearchResult:
+    total_latency = _combine_total_latency(res.compute_latency, memory_latency, latency_combine_mode)
+    total_energy = res.compute_energy + memory_energy
+    return replace(
+        res,
+        met=met_opt.table,
+        met_solver_name=met_opt.solver_name,
+        memory_latency=float(memory_latency),
+        memory_energy=float(memory_energy),
+        total_latency=float(total_latency),
+        total_energy=float(total_energy),
+        total_edp=float(edp(total_latency, total_energy)),
+    )
 def _search_training_with_recomputation(
     blocks: Sequence[Block],
     config: SearchConfig,
@@ -971,6 +1008,40 @@ def _search_training_with_recomputation(
 
     base_flops = [max(1e-9, float(b.total_flops())) for b in work_blocks]
     base_outputs = [max(1e-9, float(b.total_output_size())) for b in work_blocks]
+
+    bw_blocks = [_clone_block_tree(b) for b in reversed(work_blocks)]
+    for i, b in enumerate(bw_blocks):
+        b.name = f"bw::{i:03d}::{b.name}"
+    bw_deps = _reverse_dependencies_for_backward(n, block_deps)
+    bw_flops = [base_flops[n - 1 - i] * max(1e-9, float(config.backward_compute_scale)) for i in range(n)]
+    bw_outputs = [base_outputs[n - 1 - i] * max(1e-9, float(config.backward_output_scale)) for i in range(n)]
+
+    rc_blocks = [_clone_block_tree(b) for b in work_blocks]
+    for i, b in enumerate(rc_blocks):
+        b.name = f"rc::{i:03d}::{b.name}"
+
+    bw2_back_blocks = [_clone_block_tree(b) for b in reversed(work_blocks)]
+    for i, b in enumerate(bw2_back_blocks):
+        b.name = f"bw2::{i:03d}::{b.name}"
+
+    bw2_blocks = rc_blocks + bw2_back_blocks
+    bw2_deps: set[tuple[int, int]] = set()
+    for p, c in block_deps:
+        if 0 <= p < n and 0 <= c < n and p != c:
+            bw2_deps.add((p, c))
+    for p, c in bw_deps:
+        bw2_deps.add((n + p, n + c))
+    for j in range(n):
+        bw_j = n + (n - 1 - j)
+        bw2_deps.add((j, bw_j))
+    bw2_dep_list = sorted(bw2_deps)
+    if not bw2_dep_list and len(bw2_blocks) > 1:
+        bw2_dep_list = _default_linear_dependencies(len(bw2_blocks))
+
+    rc_flops = [f * max(1e-9, float(config.recompute_compute_scale)) for f in base_flops]
+    rc_outputs = [v * max(1e-9, float(config.recompute_output_scale)) for v in base_outputs]
+    bw2_flops_base = rc_flops + bw_flops
+    bw2_outputs_base = rc_outputs + bw_outputs
 
     best_result: SearchResult | None = None
     sub_batch_candidates = _effective_sub_batch_candidates(config)
@@ -1003,11 +1074,11 @@ def _search_training_with_recomputation(
 
         _progress(
             config,
-            f"[Training] sub_batch={sub_batch} ({sb_idx}/{len(sub_batch_candidates)}): solve FW",
+            f"[Training] sub_batch={sub_batch} ({sb_idx}/{len(sub_batch_candidates)}): solve FW ScT",
         )
 
         try:
-            fw_res = _flat_search_prepared(
+            fw_res_base = _flat_search_prepared(
                 work_blocks=work_blocks,
                 block_deps=block_deps,
                 config=phase_cfg,
@@ -1015,142 +1086,170 @@ def _search_training_with_recomputation(
                 block_outputs_override=base_outputs,
                 hierarchy_level=0,
                 hierarchy_notes=[],
-                trace_path=f"train/sb{sub_batch}/fw",
+                trace_path=f"train/sb{sub_batch}/fw_base",
                 enforce_end_dram_dependency=True,
             )
         except Exception as exc:
             _progress(config, f"[Training] FW failed for sub_batch={sub_batch}: {exc}")
             continue
 
-        end_md_raw = list(fw_res.met.dram[-1, :]) if fw_res.met.dram.size > 0 else [0.0 for _ in range(n)]
-        end_md = [max(0, min(total_sub, int(round(v)))) for v in end_md_raw]
-        stored_counts = [max(0, total_sub - v) for v in end_md]
-        discarded_counts = [max(0, v) for v in end_md]
+        retention_candidates = _training_retention_candidates(total_sub)
+        seen_end_md: set[tuple[int, ...]] = set()
+        candidate_logs: list[str] = []
 
-        bw_blocks = [_clone_block_tree(b) for b in reversed(work_blocks)]
-        for i, b in enumerate(bw_blocks):
-            b.name = f"bw::{i:03d}::{b.name}"
-        bw_deps = _reverse_dependencies_for_backward(n, block_deps)
-
-        bw1_final = [stored_counts[n - 1 - i] for i in range(n)]
-        bw_flops = [base_flops[n - 1 - i] * max(1e-9, float(config.backward_compute_scale)) for i in range(n)]
-        bw_outputs = [base_outputs[n - 1 - i] * max(1e-9, float(config.backward_output_scale)) for i in range(n)]
-
-        _progress(config, f"[Training] sub_batch={sub_batch}: solve BW1")
-        try:
-            bw1_res = _flat_search_prepared(
-                work_blocks=bw_blocks,
-                block_deps=bw_deps,
-                config=phase_cfg,
-                block_flops_override=bw_flops,
-                block_outputs_override=bw_outputs,
-                hierarchy_level=0,
-                hierarchy_notes=[],
-                trace_path=f"train/sb{sub_batch}/bw1",
-                final_counts_per_block=bw1_final,
-                initial_counts_per_block=[0 for _ in range(n)],
+        for retain_idx, retain_count in enumerate(retention_candidates, start=1):
+            desired_md_ub = max(0, total_sub - int(retain_count))
+            _progress(
+                config,
+                f"[Training] sub_batch={sub_batch}: retention {retain_idx}/{len(retention_candidates)} keep>={retain_count}",
             )
-        except Exception as exc:
-            _progress(config, f"[Training] BW1 failed for sub_batch={sub_batch}: {exc}")
-            continue
 
-        # Step-2 has 2N blocks: recomputation-forward phase + backward phase.
-        rc_blocks = [_clone_block_tree(b) for b in work_blocks]
-        for i, b in enumerate(rc_blocks):
-            b.name = f"rc::{i:03d}::{b.name}"
+            try:
+                fw_met_opt = optimize_memory_table(
+                    sct=fw_res_base.sct,
+                    block_volumes=base_outputs,
+                    block_dependencies=block_deps,
+                    sram_capacity=phase_cfg.sram_capacity,
+                    dram_capacity=phase_cfg.dram_capacity,
+                    heuristic_sram_keep_ratio=0.6,
+                    noc_bandwidth=phase_cfg.noc_bandwidth,
+                    dram_bandwidth=phase_cfg.dram_bandwidth,
+                    noc_energy_per_unit=phase_cfg.noc_energy_per_unit,
+                    dram_energy_per_unit=phase_cfg.dram_energy_per_unit,
+                    dram_noc_hops=phase_cfg.dram_noc_hops,
+                    weight_latency=phase_cfg.weight_latency,
+                    weight_energy=phase_cfg.weight_energy,
+                    use_edp_objective=phase_cfg.use_edp_objective,
+                    allow_fallback=False,
+                    enforce_end_dram_dependency=True,
+                    end_dram_upper_bounds=[desired_md_ub for _ in range(n)],
+                    force_final_sram_empty=True,
+                )
+            except Exception as exc:
+                candidate_logs.append(
+                    f"candidate sub_batch={sub_batch} retain>={retain_count} status=fw_met_failed reason={exc}"
+                )
+                continue
 
-        bw2_back_blocks = [_clone_block_tree(b) for b in reversed(work_blocks)]
-        for i, b in enumerate(bw2_back_blocks):
-            b.name = f"bw2::{i:03d}::{b.name}"
-
-        bw2_blocks = rc_blocks + bw2_back_blocks
-        bw2_deps: set[tuple[int, int]] = set()
-
-        # Recomputation-forward dependencies.
-        for p, c in block_deps:
-            if 0 <= p < n and 0 <= c < n and p != c:
-                bw2_deps.add((p, c))
-
-        # Backward dependencies.
-        for p, c in bw_deps:
-            bw2_deps.add((n + p, n + c))
-
-        # Cross-phase dependencies: backward on layer-j waits for recomputed layer-j.
-        for j in range(n):
-            bw_j = n + (n - 1 - j)
-            bw2_deps.add((j, bw_j))
-
-        bw2_dep_list = sorted(bw2_deps)
-        if not bw2_dep_list and len(bw2_blocks) > 1:
-            bw2_dep_list = _default_linear_dependencies(len(bw2_blocks))
-
-        rc_flops = [f * max(1e-9, float(config.recompute_compute_scale)) for f in base_flops]
-        rc_outputs = [v * max(1e-9, float(config.recompute_output_scale)) for v in base_outputs]
-        bw2_flops = rc_flops + bw_flops
-        bw2_outputs = rc_outputs + bw_outputs
-        bw2_final = list(discarded_counts) + [discarded_counts[n - 1 - i] for i in range(n)]
-
-        _progress(config, f"[Training] sub_batch={sub_batch}: solve BW2")
-        try:
-            bw2_res = _flat_search_prepared(
-                work_blocks=bw2_blocks,
-                block_deps=bw2_dep_list,
-                config=phase_cfg,
-                block_flops_override=bw2_flops,
-                block_outputs_override=bw2_outputs,
-                hierarchy_level=0,
-                hierarchy_notes=[],
-                trace_path=f"train/sb{sub_batch}/bw2",
-                final_counts_per_block=bw2_final,
-                initial_counts_per_block=[0 for _ in range(len(bw2_blocks))],
+            fw_memory_latency, fw_memory_energy = _estimate_memory_cost(
+                sct=fw_res_base.sct,
+                met=fw_met_opt.table,
+                block_volumes=base_outputs,
+                block_dependencies=block_deps,
+                noc_bandwidth=phase_cfg.noc_bandwidth,
+                dram_bandwidth=phase_cfg.dram_bandwidth,
+                noc_energy_per_unit=phase_cfg.noc_energy_per_unit,
+                dram_energy_per_unit=phase_cfg.dram_energy_per_unit,
+                dram_noc_hops=phase_cfg.dram_noc_hops,
+                noc_hops_compute=phase_cfg.noc_hops_compute,
+                noc_hops_sram=phase_cfg.noc_hops_sram,
             )
-        except Exception as exc:
-            _progress(config, f"[Training] BW2 failed for sub_batch={sub_batch}: {exc}")
-            continue
+            fw_res = _with_memory_override(
+                res=fw_res_base,
+                met_opt=fw_met_opt,
+                memory_latency=fw_memory_latency,
+                memory_energy=fw_memory_energy,
+                latency_combine_mode=phase_cfg.latency_combine_mode,
+            )
 
-        total_compute_latency = fw_res.compute_latency + bw1_res.compute_latency + bw2_res.compute_latency
-        total_compute_energy = fw_res.compute_energy + bw1_res.compute_energy + bw2_res.compute_energy
-        total_memory_latency = fw_res.memory_latency + bw1_res.memory_latency + bw2_res.memory_latency
-        total_memory_energy = fw_res.memory_energy + bw1_res.memory_energy + bw2_res.memory_energy
+            end_md_raw = list(fw_res.met.dram[-1, :]) if fw_res.met.dram.size > 0 else [0.0 for _ in range(n)]
+            end_md = tuple(max(0, min(total_sub, int(round(v)))) for v in end_md_raw)
+            if end_md in seen_end_md:
+                continue
+            seen_end_md.add(end_md)
 
-        total_latency = fw_res.total_latency + bw1_res.total_latency + bw2_res.total_latency
-        total_energy = fw_res.total_energy + bw1_res.total_energy + bw2_res.total_energy
-        total_edp = edp(total_latency, total_energy)
+            stored_counts = [max(0, total_sub - v) for v in end_md]
+            discarded_counts = [max(0, v) for v in end_md]
+            bw1_final = [stored_counts[n - 1 - i] for i in range(n)]
+            bw2_final = list(discarded_counts) + [discarded_counts[n - 1 - i] for i in range(n)]
 
-        notes = [
-            f"training_mode=True sub_batch={sub_batch}",
-            f"fw_end_met_d={end_md}",
-            f"bw1_final_counts={bw1_final}",
-            f"bw2_final_counts={bw2_final}",
-        ]
+            _progress(config, f"[Training] sub_batch={sub_batch}: solve BW1 with end_md={list(end_md)}")
+            try:
+                bw1_res = _flat_search_prepared(
+                    work_blocks=bw_blocks,
+                    block_deps=bw_deps,
+                    config=phase_cfg,
+                    block_flops_override=bw_flops,
+                    block_outputs_override=bw_outputs,
+                    hierarchy_level=0,
+                    hierarchy_notes=[],
+                    trace_path=f"train/sb{sub_batch}/bw1_keep{retain_count}",
+                    final_counts_per_block=bw1_final,
+                    initial_counts_per_block=[0 for _ in range(n)],
+                )
+            except Exception as exc:
+                candidate_logs.append(
+                    f"candidate sub_batch={sub_batch} retain>={retain_count} status=bw1_failed end_md={list(end_md)} reason={exc}"
+                )
+                continue
 
-        phase_results = {
-            "fw": _phase_payload(fw_res),
-            "bw1": _phase_payload(bw1_res),
-            "bw2": _phase_payload(bw2_res),
-        }
+            _progress(config, f"[Training] sub_batch={sub_batch}: solve BW2 with end_md={list(end_md)}")
+            try:
+                bw2_res = _flat_search_prepared(
+                    work_blocks=bw2_blocks,
+                    block_deps=bw2_dep_list,
+                    config=phase_cfg,
+                    block_flops_override=bw2_flops_base,
+                    block_outputs_override=bw2_outputs_base,
+                    hierarchy_level=0,
+                    hierarchy_notes=[],
+                    trace_path=f"train/sb{sub_batch}/bw2_keep{retain_count}",
+                    final_counts_per_block=bw2_final,
+                    initial_counts_per_block=[0 for _ in range(len(bw2_blocks))],
+                )
+            except Exception as exc:
+                candidate_logs.append(
+                    f"candidate sub_batch={sub_batch} retain>={retain_count} status=bw2_failed end_md={list(end_md)} reason={exc}"
+                )
+                continue
 
-        merged = replace(
-            fw_res,
-            best_sub_batch=int(sub_batch),
-            compute_latency=float(total_compute_latency),
-            compute_energy=float(total_compute_energy),
-            memory_latency=float(total_memory_latency),
-            memory_energy=float(total_memory_energy),
-            total_latency=float(total_latency),
-            total_energy=float(total_energy),
-            total_edp=float(total_edp),
-            hierarchy_notes=notes,
-            phase_results=phase_results,
-        )
+            total_compute_latency = fw_res.compute_latency + bw1_res.compute_latency + bw2_res.compute_latency
+            total_compute_energy = fw_res.compute_energy + bw1_res.compute_energy + bw2_res.compute_energy
+            total_memory_latency = fw_res.memory_latency + bw1_res.memory_latency + bw2_res.memory_latency
+            total_memory_energy = fw_res.memory_energy + bw1_res.memory_energy + bw2_res.memory_energy
 
-        _progress(
-            config,
-            f"[Training] sub_batch={sub_batch} total_latency={total_latency:.6e} total_energy={total_energy:.6e} total_edp={total_edp:.6e}",
-        )
+            total_latency = fw_res.total_latency + bw1_res.total_latency + bw2_res.total_latency
+            total_energy = fw_res.total_energy + bw1_res.total_energy + bw2_res.total_energy
+            total_edp = edp(total_latency, total_energy)
 
-        if best_result is None or merged.total_edp < best_result.total_edp:
-            best_result = merged
+            notes = [
+                f"training_mode=True sub_batch={sub_batch}",
+                f"retain_target={retain_count}",
+                f"fw_end_met_d={list(end_md)}",
+                f"bw1_final_counts={bw1_final}",
+                f"bw2_final_counts={bw2_final}",
+            ] + list(candidate_logs)
+
+            phase_results = {
+                "fw": _phase_payload(fw_res),
+                "bw1": _phase_payload(bw1_res),
+                "bw2": _phase_payload(bw2_res),
+            }
+
+            merged = replace(
+                fw_res,
+                best_sub_batch=int(sub_batch),
+                compute_latency=float(total_compute_latency),
+                compute_energy=float(total_compute_energy),
+                memory_latency=float(total_memory_latency),
+                memory_energy=float(total_memory_energy),
+                total_latency=float(total_latency),
+                total_energy=float(total_energy),
+                total_edp=float(total_edp),
+                hierarchy_notes=notes,
+                phase_results=phase_results,
+            )
+
+            candidate_logs.append(
+                f"candidate sub_batch={sub_batch} retain>={retain_count} status=ok end_md={list(end_md)} total_edp={total_edp:.6e}"
+            )
+            _progress(
+                config,
+                f"[Training] sub_batch={sub_batch} retain>={retain_count} total_latency={total_latency:.6e} total_energy={total_energy:.6e} total_edp={total_edp:.6e}",
+            )
+
+            if best_result is None or merged.total_edp < best_result.total_edp:
+                best_result = merged
 
     if best_result is None:
         raise RuntimeError("No feasible training candidate found.")
@@ -1192,6 +1291,9 @@ def search_schedule(
         hierarchy_notes=[],
         trace_path="root",
     )
+
+
+
 
 
 

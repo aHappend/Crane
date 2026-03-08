@@ -96,6 +96,7 @@ def _estimate_dep_traffic_from_tables(
 
     n_states = sct.num_states
     n_blocks = sct.num_blocks
+
     deps = _deps_by_child(n_blocks=n_blocks, block_dependencies=block_dependencies)
 
     delta = [[0.0 for _ in range(n_blocks)] for _ in range(n_states)]
@@ -161,6 +162,8 @@ def _optimize_memory_with_ortools(
     weight_energy: float,
     use_edp_objective: bool,
     enforce_end_dram_dependency: bool,
+    end_dram_upper_bounds: Sequence[int] | None,
+    force_final_sram_empty: bool,
 ) -> MemoryOptimizationResult:
     solver = pywraplp.Solver.CreateSolver("SCIP")
     if solver is None:
@@ -168,6 +171,9 @@ def _optimize_memory_with_ortools(
 
     n_states = sct.num_states
     n_blocks = sct.num_blocks
+
+    if end_dram_upper_bounds is not None and len(end_dram_upper_bounds) != n_blocks:
+        raise ValueError("end_dram_upper_bounds length must equal number of blocks")
 
     ms = []
     md = []
@@ -214,6 +220,17 @@ def _optimize_memory_with_ortools(
             if parent < 0 or child < 0 or parent >= n_blocks or child >= n_blocks:
                 continue
             solver.Add(md[end_i][parent] >= md[end_i][child])
+
+    if n_states > 0 and end_dram_upper_bounds is not None:
+        end_i = n_states - 1
+        for j in range(n_blocks):
+            ub = max(0, min(int(round(sct.get(end_i, j))), int(end_dram_upper_bounds[j])))
+            solver.Add(md[end_i][j] <= ub)
+
+    if n_states > 0 and force_final_sram_empty:
+        end_i = n_states - 1
+        for j in range(n_blocks):
+            solver.Add(ms[end_i][j] == int(round(sct.get(end_i, j))))
 
     # Eq.11 / Eq.12 memory capacity.
     for i in range(n_states):
@@ -376,6 +393,8 @@ def optimize_memory_table(
     use_edp_objective: bool = True,
     allow_fallback: bool = True,
     enforce_end_dram_dependency: bool = False,
+    end_dram_upper_bounds: Sequence[int] | None = None,
+    force_final_sram_empty: bool = False,
 ) -> MemoryOptimizationResult:
     if pywraplp is None:
         if not allow_fallback:
@@ -399,11 +418,18 @@ def optimize_memory_table(
             weight_energy=weight_energy,
             use_edp_objective=use_edp_objective,
             enforce_end_dram_dependency=enforce_end_dram_dependency,
+            end_dram_upper_bounds=end_dram_upper_bounds,
+            force_final_sram_empty=force_final_sram_empty,
         )
     except Exception:
         if not allow_fallback:
             raise
         met = build_memory_table(sct, sram_keep_ratio=heuristic_sram_keep_ratio)
         return MemoryOptimizationResult(table=met, objective=0.0, solver_name="heuristic-fallback")
+
+
+
+
+
 
 
