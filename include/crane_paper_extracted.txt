@@ -1,0 +1,1884 @@
+
+
+===== PAGE 1 =====
+
+. 
+. 
+Latest updates: hps://dl.acm.org/doi/10.1145/3725843.3756023
+. 
+. 
+RESEARCH-ARTICLE
+Crane: Inter-Layer Scheduling Framework for DNN Inference and
+Training Co-Support on Tiled Architecture
+YU GONG, Rutgers University–New Brunswick, New Brunswick, NJ, United States
+. 
+LINGYI HUANG, Rutgers University–New Brunswick, New Brunswick, NJ, United States
+. 
+HAODONG CHANG, Texas A&M University, College Station, TX, United States
+. 
+RONGJIAN LIANG, NVIDIA, Santa Clara, CA, United States
+. 
+CHENG YANG, Rutgers University–New Brunswick, New Brunswick, NJ, United States
+. 
+ZHEXIANG TANG, Rutgers University–New Brunswick, New Brunswick, NJ, United States
+. 
+View all
+. 
+. 
+Open Access Support provided by:
+. 
+Texas A&M University
+. 
+Rutgers University–New Brunswick
+. 
+NVIDIA
+. 
+PDF Download
+3725843.3756023.pdf
+04 March 2026
+Total Citations: 1
+Total Downloads: 3824
+. 
+. 
+Published: 17 October 2025
+. 
+. 
+Citation in BibTeX format
+. 
+. 
+MICRO 2025: 58th IEEE/ACM
+International Symposium on
+Microarchitecture
+October 18 - 22, 2025
+Seoul, Korea
+. 
+. 
+Conference Sponsors:
+SIGMICRO
+MICRO '25: Proceedings of the 58th IEEE/ACM International Symposium on Microarchitecture (October 2025)
+hps://doi.org/10.1145/3725843.3756023
+ISBN: 9798400715730
+.
+
+
+===== PAGE 2 =====
+
+Crane: Inter-Layer Scheduling Framework for DNN Inference and
+Training Co-Support on Tiled Architecture
+Yu Gong
+Electrical and Computer Engineering
+Rutgers University
+Piscataway, New Jersey, USA
+yg430@soe.rutgers.edu
+Lingyi Huang
+Electrical and Computer Engineering
+Rutgers University
+Piscataway, USA
+lingyi.huang@rutgers.edu
+Haodong Chang
+Electrical and Computer Engineering
+Texas A&M University
+College Station, USA
+haodong@tamu.edu
+Rongjian Liang
+Nvidia
+Austin, USA
+rliang@nvidia.com
+Cheng Yang
+Electrical and Computer Engineering
+Rutgers University
+Piscataway, USA
+cy411@scarletmail.rutgers.edu
+Zhexiang Tang
+Electrical and Computer Engineering
+Rutgers University
+Piscataway, USA
+zhexiang.tang@rutgers.edu
+Jiang Hu
+Electrical and Computer Engineering
+Texas A&M University
+College Station, USA
+Computer Science and Engineering
+Texas A&M University
+College Station, USA
+jianghu@tamu.edu
+Bo Yuan
+Electrical and Computer Engineering
+Rutgers University
+Piscataway, USA
+bo.yuan@soe.rutgers.edu
+Abstract
+Tiled architectures have emerged as a compelling platform for
+scaling deep neural network (DNN) execution, offering both com-
+pute density and communication efficiency. To harness their full
+potential, effective inter-layer scheduling is crucial for managing
+operation order, memory behavior, and compute resource coordi-
+nation. However, current schedulers often fall short due to three
+persistent issues: incomplete treatment of core design factors, lim-
+ited flexibility in handling diverse workload structures, and reliance
+on heuristic search algorithms with poor convergence.
+In this work, we trace these limitations to the absence of a unified
+and expressive scheduling representation. We introduce Crane, a
+framework that addresses these gaps through a hierarchical table-
+format abstraction capable of encoding rich scheduling semantics.
+Crane supports both inference and training workloads, and refor-
+mulates scheduling as a mathematically structured optimization
+problem, enabling more complete and efficient exploration of the
+scheduling space. Evaluations show that Crane reduces energy-
+delay product by up to 21.01× and improves scheduling speed by
+at least 2.82× over state-of-the-art baselines.
+CCS Concepts
+•Computer systems organization → Neural networks.
+This work is licensed under a Creative Commons Attribution-NonCommercial 4.0
+International License.
+MICRO ’25, Seoul, Republic of Korea
+© 2025 Copyright held by the owner/author(s).
+ACM ISBN 979-8-4007-1573-0/25/10
+https://doi.org/10.1145/3725843.3756023
+Keywords
+Inter-layer Scheduling, Deep Neural Networks, Tiled Architecture
+ACM Reference Format:
+Yu Gong, Lingyi Huang, Haodong Chang, Rongjian Liang, Cheng Yang,
+Zhexiang Tang, Jiang Hu, and Bo Yuan. 2025. Crane: Inter-Layer Scheduling
+Framework for DNN Inference and Training Co-Support on Tiled Archi-
+tecture. In 58th IEEE/ACM International Symposium on Microarchitecture
+(MICRO ’25), October 18–22, 2025, Seoul, Republic of Korea. ACM, New York,
+NY, USA, 14 pages. https://doi.org/10.1145/3725843.3756023
+1 Introduction
+Deep neural network (DNN) hardware accelerators have been
+widely adopted in real-world applications for energy-efficient exe-
+cution. As the computational and storage demands of DNNs con-
+tinue to grow, tiled architectures—composed of Network-on-Chip
+(NoC)-connected hardware tiles—have emerged as a scalable and
+flexible solution for large-scale model processing. In these archi-
+tectures, each tile typically integrates a processing element (PE)
+array, a global buffer, and an NoC router, enabling efficient intra-
+and inter-tile communication. This structural design supports high-
+performance execution and has been widely adopted in both indus-
+try [17, 22, 24, 35] and academia [3, 5, 8, 10, 11, 16, 20, 31, 36, 42].
+To fully utilize the computing power and memory capacity of
+connected hardware tiles, an efficient scheduling scheme—responsible
+for mapping computational workloads to hardware resources—is
+critical. DNN scheduling is generally divided into intra-layer and
+inter-layer scheduling. Intra-layer scheduling focuses on mapping
+individual layers to one or more hardware tiles and has been ex-
+tensively studied in the literature [7, 11, 12, 28, 32, 33, 37], with a
+1250
+
+===== PAGE 3 =====
+
+MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea Yu Gong, Lingyi Huang, Haodong Chang, Rongjian Liang, Cheng Yang, Zhexiang Tang, Jiang Hu, and Bo Yuan
+wide range of solutions and notations proposed. In contrast, inter-
+layer scheduling determines the computation order, memory access
+patterns, and resource allocation across multiple layers and tiles,
+aiming to maximize hardware utilization and energy efficiency. As
+application scenarios diversify and DNN architectures grow in-
+creasingly complex, inter-layer scheduling has attracted growing
+research attention [5, 9, 13, 38, 40].
+Despite recent efforts, existing inter-layer schedulers still face
+several fundamental limitations (Section 2.2). First, with respect
+to the four key design factors in inter-layer scheduling—namely
+execution scheme, fusion strategy, recomputation, and batch split-
+ting—even state-of-the-art solutions fail to comprehensively explore
+all of them, thereby limiting performance. In particular, the lack of
+integration of recomputation as a core design factor for training op-
+timization significantly constrains the ability of current schedulers
+to support efficient training. Second, even within the limited scope
+of design factors they incorporate, existing inter-layer schedulers
+suffer from restricted scheduling flexibility—such as constrained
+processing orders for cross-layer sub-batches, support limited to
+linear chain-structured workloads, or even a complete inability to
+handle training workloads. Third, the underlying search engines of
+most existing inter-layer schedulers rely on heuristic approaches,
+which essentially sample the search space with slow convergence.
+This leads to incomplete and inefficient exploration, resulting in
+suboptimal scheduling performance and slower scheduling speed.
+To address these limitations, we first analyze and identify their
+root causes —chiefly, the absence of a proper representation frame-
+work. We then distill three essential lessons that such a representa-
+tion must satisfy: rich expressiveness, topological flexibility, and
+mathematical structuredness (Section 3.1). Guided by these insights,
+we propose Crane (Section 4,5,6), a novel inter-layer scheduling
+framework designed to support both inference and training on tiled
+architectures. Crane is built upon an efficient table-format hierar-
+chical representation that comprehensively captures key design
+factors, enables flexible scheduling across diverse workloads, and
+formulates the scheduling problem as a structured optimization
+task that can be thoroughly and efficiently solved by mixed-integer
+linear programming (MILP) solver. Evaluation results (Section 7)
+show that Crane achieves a 1.13× to 21.01× reduction in energy-
+delay product costs and delivers at least a2.82× scheduling speedup
+compared to state-of-the-art solutions.
+2 Background & Motivation
+2.1 Inter-layer Scheduling
+In general, inter-layer scheduling for tiled architecture is typically
+structured around the following four components:
+1) Execution Scheme. This decision variable defines how the
+DNN workload consisting of multiple layers is mapped temporally
+and spatially across multiple computing cores. In general, three
+execution patterns are commonly adopted in practice: Sequential:
+Processes the model layer by layer in sequence; therefore, different
+layers are executed at different time steps, and each layer fully uti-
+lizes all the computational resources and on-chip memory ;Pipeline:
+Coordinates several dependent layers to be processed concurrently
+in a pipelined fashion, sharing the hardware tiles across layers;
+Inter-layer
+Scheduler
+Design
+Factors
+Search
+Alg.
+Support
+Training
+Search Space
+(Training)
+Schedule
+Flexible
+MBS F+B Greedy
+Slow
+Yes
+Limited
+O (2𝑛 log 𝑚)
+Sampled Yes
+Tangram F+B DP
+Slow Hypothesized O (2𝑛 log 𝑚)
+Thoroughly Yes
+Checkmate R MILP
+Fast
+Yes
+Limited
+O (𝑛2 )
+Thoroughly
+Batch
+-level Only
+TileFlow E+F+B
+(Partially)
+GA
+Slow No N/A Branchless
+Only
+SET E+F+B SA
+Slow Hypothesized O (9.899𝑛 log 𝑚)
+Sampled
+Tied to
+Batch-level
+Crane E+F+R+B MILP
+Fast Yes O (𝑚4𝑛−1 log 𝑚)
+Thoroughly Yes
+Table 1: Comparison of various inter-layer schedulers. Some notes:
+i) E, F, R and B denote execution scheme, layer fusion, recomputa-
+tion, and sub-batch splitting, respectively.
+ii) The search spaces is for 𝑛-layer model with batch size of 𝑚.
+iii) Tangram and SET are not designed for training and do not report
+any training results. We hypothesize their potential training support
+by directly applying their inference schedules to the backward pass.
+iv) DP: Dynamic Programming; GA: Genetic Algorithm; SA: Simu-
+lated Annealing; MILP: Mixed-Integer Linear Programming
+v) The resource binding and loop ordering of TileFlow are manually
+fixed and only loop tiling is explored in [21].
+Parallel: Allows multiple layers to be processed simultaneously
+without needing to account for dependencies among them.
+2) Fusion Strategy. This is another important design factor that
+determines how to directly transfer the output data from previ-
+ous layers to the latter ones without expensive off-chip memory
+(DRAM) access. As the strategy aims at reducing data movement,
+fusion [2, 18, 26, 41] is typically considered along with the execu-
+tion pattern. In the scenario of sequential, the intermediate results
+are calculated and retained within local hardware tiles; while in the
+scenario of pipeline, the mapped group of tiles for one layer sends
+the output data to another tile group allocated for the next layer.
+3) Recomputation Scheme. This strategy decides the protocol
+that when and which intermediate results should be temporally
+discarded and recomputed in the future as needed. By trading ad-
+ditional computation for reduction in storage, the recomputation
+scheme aims to effectively free up memory capacity – a critical
+advantage in various memory-constrained scenarios. In practice,
+the most common application of this strategy is in DNN training
+[4, 15, 19, 39], where DRAM capacity becomes a major bottleneck,
+especially as memory consumption for activation scales with batch
+size. Applying recomputation in this context enables the training of
+larger and more complex models using larger batch sizes without
+requiring extra hardware resources.
+4) Batch Splitting Plan. This strategy determines how to par-
+tition a batch of data into smaller subsets, which are then pro-
+cessed sequentially to complete the computation for each layer
+[6, 14, 18, 34]. Batch splitting can be applied in both inference and
+training scenarios, particularly when memory capacity is insuffi-
+cient to process an entire batch at once. By dividing the batch into
+manageable pieces, this approach allows the utilization of limited
+memory resources while still leveraging batch processing benefits.
+1251
+
+===== PAGE 4 =====
+
+Crane: Inter-Layer Scheduling Framework for DNN Inference and Training Co-Support on Tiled Architecture MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea
+2.2 Limitations of Previous Works
+Motivated by the critical role of inter-layer scheduling in enabling
+efficient DNN inference and training, a set of inter-layer schedulers
+have been proposed in recent years. Table 1 summarizes the most
+relevant works, highlighting the design factors they explore, the
+search algorithms they employ, and their target deployment sce-
+narios. Based on this summary, we identify several key limitations:
+Challenge #1. Incomplete Exploration of Design Factors.
+None of the existing works comprehensively and systematically
+explore all four key design factors. As shown in Table 1, even state-
+of-the-art inter-layer schedulers such as SET [5] and TileFlow [40]
+lack support for recomputation schemes (R), resulting in limited or
+no applicability to training workloads. On the other hand, while
+Checkmate [15] incorporates recomputation strategies, it does not
+account for the other design factors (such as E and F) and is incom-
+patible with schedulers like SET due to fundamental differences
+in search algorithms and representation frameworks. Addition-
+ally, Checkmate’s exploration is restricted to the batch level rather
+than the sub-batch level (B), significantly constraining its schedul-
+ing granularity and design space. As a result, existing inter-layer
+scheduling approaches cannot offer efficient, unified solutions –
+particularly for training scenarios. For example, as illustrated in
+Fig. 1, in ResNet-50 training with a batch size of 64, prior works
+can only optimize either DRAM data access (e.g., SET) or capacity
+requirements (e.g., Checkmate), but not both simultaneously.
+Challenge #2. Constrained Scheduling Flexibility. Even
+when optimizing solely for inference scenarios—where recompu-
+tation (R) is not required—existing schedulers such as SET and
+TileFlow, which consider P+F+B, still suffer from limited schedul-
+ing flexibility. Specifically, SET enforces that the processing order
+of sub-batches across layers is strictly tied to the batch-level ex-
+ecution pattern. For example, when the execution scheme for 3-
+sub-batch Layer-A, Layer-B and Layer-C is set to a pipeline pattern,
+the identified sub-batch-level processing order can only be 𝐴1 →
+(𝐴2, 𝐵1) → ( 𝐴3, 𝐵2, 𝐶1) → ( 𝐵3, 𝐶2) → 𝐶3. Alternative schedul-
+ing options, such as 𝐴1𝐴2 → ( 𝐴3, 𝐵1) → ( 𝐵2𝐵3, 𝐶1𝐶2) → 𝐶3, are
+never explored (see Fig. 15(a) for a practical example). Evidently,
+this rigid constraint significantly narrows the design space and
+may miss more efficient scheduling solutions. Although TileFlow
+overcomes the rigid batch-level scheduling constraint by allow-
+ing layer partitioning along arbitrary dimensions, it has two key
+limitations. 1) It is limited to optimizing linear, chain-structured
+workloads, such as GEMM or convolution chains. This limitation
+stems from its tile-centric, layer-splitting representation, which
+cannot model control-flow structures like branches. 2) It cannot sup-
+port training workloads. Partitioning along non-batch dimensions
+preserves correctness only in forward propagation; backward prop-
+agation—critical for training—requires additional halo exchanges,
+global reductions, and synchronized statistics.
+Challenge #3. Incomplete and Inefficient Search.Most state-
+of-the-art inter-layer schedulers rely on heuristic search algorithms,
+leading to both insufficient solution quality and long runtime. This
+limitation manifests in two ways. 1) Incomplete scheduling space
+coverage: the search procedures do not comprehensively explore the
+full scheduling space but instead rely onsampling-based heuristics
+such as simulated annealing (SET) or genetic algorithms (TileFlow).
+05101520
+Data Access (GB)Required DRAM Capacity (GB)
+BaselineSETMBSCheckmateOurs
+Figure 1: Required data access and DRAM capacity for training
+ResNet-50 with a batch size of 64. While SET and MBS reduce data
+access through batch splitting (B) and layer fusion (F), the overall
+DRAM capacity requirement remains high. Checkmate significantly
+lowers DRAM capacity by introducing recomputation (R), while hav-
+ing high data access. Crane effectively reduces both data access and
+DRAM capacity through comprehensive optimization strategies.
+These methods inherently risk missing globally optimal solutions.
+2) Long scheduling duration: due to their stochastic nature, these
+heuristics converge slowly, resulting in long search times even for
+moderately sized workloads. For example, scheduling Inception
+inference with a batch size of 128 on 144 hardware tiles takes over
+two hours using the SET framework on an AMD EPYC 7402P CPU.
+3 Crane Preview: Philosophy & Contributions
+3.1 Lessons Learned: Representation Matters
+As outlined in Section 2.2, existing inter-layer schedulers suffer
+from several critical limitations. Our in-depth analysis reveals that
+the root cause lies in thelack of a proper representation framework:
+Lesson #1. Representation should provide rich expressive-
+ness. For Challenge #1, the reason prior works cannot fully explore
+all four design factors is that their underlying representations lack
+the expressiveness needed to support such exploration. For exam-
+ple, automatic exploration of recomputation strategies requires
+fine-grained tracking of memory consumption across all time steps
+and layers—something that the resource allocation (RA) tree-based
+notation used in SET cannot provide.
+Lesson #2. Representation should exhibit topological flexi-
+bility. For Challenge #2, the inherent topology of the representa-
+tions used in prior works limits the flexibility of scheduling. For
+example, the construction process of the ratio-tree in SET inher-
+ently enforces repeated execution patterns across the same node,
+which imposes rigid scheduling constraints. In the case of TileFlow,
+its tile-centric tree representation works well for simple, linear
+chains of computation. However, it becomes significantly challeng-
+ing to construct tile trees that accurately describe more complex
+computation flows involving multiple fan-in and fan-out structures.
+Lesson #3. Representation should support mathematical
+structuredness. For Challenge #3, the representation fundamen-
+tally shapes the form and tractability of the optimization problem.
+Existing works fail to produce well-structured objectives—they
+lack essential mathematical properties such as continuity, differen-
+tiability, convexity, and linear-discrete structure. As a result, the
+scheduling problems cannot be formulated for efficient, principled
+optimization and must instead rely on heuristic, sampling-based
+search with slow convergence and no guarantee of solution quality.
+1252
+
+===== PAGE 5 =====
+
+MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea Yu Gong, Lingyi Huang, Haodong Chang, Rongjian Liang, Cheng Yang, Zhexiang Tang, Jiang Hu, and Bo Yuan
+3.2 Key Contributions of Crane: Table-format
+Hierarchical Representation
+Grounded in the representation-centric design philosophy outlined
+above, the core innovation of Crane lies in developing an effective
+representation that satisfies the key requirements of expressiveness,
+flexibility, and mathematical structuredness. More specifically:
+Contribution #1. First, to address Challenge #2, in Section 4 we
+identify and generalize a novel hierarchical representation, where
+the execution scheme at each hierarchical level is modeled as a
+subset of a pipeline scheme. This hierarchical structure offers suf-
+ficient topological flexibility to accommodate diverse scheduling
+behaviors and is proven to abstract the execution scheme of any
+model whose computational graph forms a directed acyclic graph
+(DAG), given sufficient hierarchical depth.
+Contribution #2. Then, to address Challenge #1, in Section 5.1,
+5.2, 5.3 and 5.5, we introduce a table-format notation to capture sub-
+batch execution and memory status at each level of the hierarchy.
+These tables explicitly record the effects of scheduling decisions
+on both workload execution and memory usage. As a result, the
+table-format representation offers sufficient expressiveness to fully
+describe the detailed impact of all four key design factors.
+Contribution #3. Finally, to address Challenge #3, in Section 5.4,
+5.5 we show that the structured nature of the table-format represen-
+tation enables the scheduling problem to be formulated as a MILP.
+The linear constraints and clearly defined decision variables of the
+table representation allow the use of mature MILP solvers, enabling
+thorough exploration of the scheduling space with significantly
+faster convergence compared to heuristic methods.
+4 Hierarchical Representation of Scheduling
+4.1 Intuitive Glance
+To efficiently explore the vast scheduling space, we propose a hier-
+archical representation of the scheduling schemes. The core of this
+representation is the concept of Execution State, which captures
+the pattern of active layer execution – that is, which layers are
+simultaneously involved in computation at each processing stage.
+Example 1. Take the scheduling of a 2-layer model as an example.
+As shown in Fig. 2, when the two layers are processed sequentially,
+the execution involves exactly two distinct States: initially, only
+Layer-1 is active (State-1), followed by a stage where only Layer-
+2 is active (State-3). In contrast, when the layers are processed
+concurrently (i.e., in parallel), the execution involves only a single
+State – both Layer-1 and Layer-2 are active simultaneously (State-2).
+Finally, in the case of pipeline processing, the execution progresses
+through three distinct States, involving Layer-1 alone, then both
+layers concurrently, and finally Layer-2 alone – that is, all three
+States (State-1, State-2, and State-3) occur over time.
+Notably, from the earlier example, we observe that the pipeline
+pattern naturally encompasses all execution states that also appear
+in the sequential and parallel patterns. This suggests that pipeline
+scheduling may serve as a unifying structure, capable of capturing the
+full range of active layer configurations encountered across different
+scheduling strategies. However, due to the simplicity of the 2-layer
+model, this observation may not generalize. To further examine its
+12SchedulingTime12Tiles
+SequentialParallelTime21Tiles
+PipelineTime121Tiles2
+State-1State-3State-2State-1 State-2 State-31:State-121:State-22:State-3DerivationPipeline format
+Figure 2: Derive states of execution scheme from pipeline pattern.
+Time13213244Tiles
+Time
+TilesA4A4 AState-1A4State-24State-3Pipeline formatDerivation
+Block A
+Scheduling
+Time
+Tiles1321231State-112State-2State-312332State-43State-5
+Pipeline formatDerivation123
+A4
+Active State
+Scheduling1234Block A
+Scheduling
+ActiveState
+Figure 3: The states of complex execution scheme of a 4-layer model
+can be derived from pipeline pattern in a hierarchical manner.
+validity, we consider a more complex example involving a deeper
+model with a more intricate sub-batch-level scheduling scheme.
+Example 2. As illustrated in Fig. 3, consider a 4-layer model whose
+scheduling behavior cannot be easily categorized into any single
+basic pattern. To analyze it, we group Layer-1 through Layer-3 into
+a single block A, effectively transforming the model into a 2-block
+structure: block A followed by Layer-4 (treated as a standalone
+block). At this level of abstraction, the overall schedule clearly
+follows a pipeline pattern between block A and Layer-4. All exe-
+cution states involved in this 2-block view correspond to standard
+pipeline-derived states. Looking inside block A, its internal sched-
+uling consists of four distinct execution states: (1) a state where
+only Layer-1 is active; (2) a state where Layer-1 and Layer-2 are
+active concurrently; (3) a state where Layer-2 and Layer-3 are active
+concurrently; and (4) a state where only Layer-3 is active. When
+we arrange Layer-1 through Layer-3 in a pure pipeline fashion, we
+observe five distinct pipeline-derived execution states. Crucially,
+the four states actually used within block A are all included in
+this set of five, reinforcing the observation that pipeline-derived
+execution states are expressive enough to represent even irregular
+or non-canonical schemes.
+Hierarchical Generalization. This hierarchical interpretation
+naturally extends to deeper models with increasingly complex
+scheduling behavior. By recursively grouping subsets of layers
+1253
+
+===== PAGE 6 =====
+
+Crane: Inter-Layer Scheduling Framework for DNN Inference and Training Co-Support on Tiled Architecture MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea
+into higher-level blocks, the overall scheduling can be abstracted
+into multiple hierarchical levels. While the interaction between
+blocks at each level may vary in form, we consistently observe
+that the execution states involved – regardless of complexity – are
+drawn from, or are subsets of, those generated by canonical pipeline
+scheduling. This reinforces the role of the pipeline pattern not only
+as a representational baseline, but as a structural foundation for
+expressing general inter-layer scheduling schemes.
+Table 2: Notation Description.
+Notation Description
+𝐵𝑆 Batch size
+𝐵𝑆𝑠𝑢𝑏 Sub-batch size
+𝑑𝑚,𝑗 Dependency from Layer-𝑚 to Layer-𝑗
+𝐿 Total number of layers in the model
+𝑁 Number of sub-blocks in a composite block
+L Set of all layers in the model
+𝐵 A block (basic or composite)
+𝐵𝑖 The 𝑖-th sub-block of block 𝐵
+C𝐵 Ordered sequence of sub-blocks within block 𝐵
+L𝐵 Set of layers contained in block 𝐵
+H Hierarchical block structure over L
+S𝐵 State index set of block 𝐵: {1, . . . , 2𝑁 − 1}
+J𝑖 Sub-blocks active in state-𝑖
+𝑠𝑖 State workload: number of sub-batches processed in state-𝑖
+A𝐵′ Set of states where sub-block 𝐵′ is active
+LJ𝑖 Layers active in state-𝑖
+Aℓ States where layer ℓ is active
+Observation 1. With sufficient hierarchical abstraction, complex
+inter-layer scheduling schemes in deep models can be consistently
+represented by execution states derived from the pipeline pattern.
+This highlights pipeline scheduling as a unifying structural basis for
+expressing general execution behavior across all levels in models.
+4.2 Formal Notation
+We now formalize the core concepts introduced in Section 4.1.
+Definition 1 (Block). Let L = {1, 2, . . . , 𝐿} be the set of all layers
+in the model. A block 𝐵 is a structural scheduling unit defined
+recursively as follows:
+(i) 𝐵 is a basic block if it corresponds directly to a consecutive
+subset of layers from L, and contains no sub-blocks.
+(ii) 𝐵 is a composite block if it consists of an ordered sequence
+of sub-blocks C𝐵 = {𝐵1, 𝐵2, . . . , 𝐵𝑁 }, where each 𝐵𝑖 is itself a
+block (either basic or composite).
+The set of layers associated with block 𝐵, denoted L𝐵, is defined
+recursively as:
+L𝐵 =
+(
+the given layer subset, if 𝐵 is basic,Ð
+𝐵𝑖 ∈ C𝐵 L𝐵𝑖 , if 𝐵 is composite.
+A block is said to be top-level if the associated layer set spans
+the entire model, i.e., L𝐵 = L.
+Definition 2 (State). Let 𝐵 be a block with an ordered sequence
+of sub-blocks C𝐵 = {𝐵1, 𝐵2, . . . , 𝐵𝑁 }, where each 𝐵𝑖 is a block
+(either basic or composite). The execution of block 𝐵 proceeds
+through a set of pipeline-derived execution states, indexed byS𝐵 =
+{1, 2, . . . , 2𝑁 − 1}.
+Each state index 𝑖 ∈ S𝐵 is associated with:
+(i) an involved sub-block set J𝑖 ⊆ C𝐵, defined as:
+J𝑖 =
+(
+{𝐵1, 𝐵2, . . . , 𝐵𝑖 }, if 𝑖 ≤ 𝑁 ,
+{𝐵𝑖 −𝑁 +1, 𝐵𝑖 −𝑁 +2, . . . , 𝐵𝑁 }, if 𝑖 > 𝑁 ;
+(ii) a non-negative scalar 𝑠𝑖 ∈ R≥0, called the state workload ,
+representing the number of sub-batches processed during
+State-𝑖. These scalars will participate in a later formulation of
+scheduling constraints.
+Definition 3 (Involved State Set ). Let 𝐵 be a block with sub-
+block sequence C𝐵 = {𝐵1, 𝐵2, . . . , 𝐵𝑁 } and state index set S𝐵 =
+{1, 2, . . . , 2𝑁 −1}. The involved state set of an entity specifies indices
+of all states where that entity is active during execution of 𝐵.
+(i) For a sub-block 𝐵′ ∈ C𝐵, the involved state set is:
+A𝐵′ = {𝑖 ∈ S𝐵 | 𝐵′ ∈ J𝑖 }.
+(ii) For a layer ℓ ∈ L 𝐵, let L J𝑖 = Ð
+𝐵′ ∈ J𝑖 L𝐵′ be the set of layers
+active in state 𝑖. The involved state set of layer ℓ is:
+Aℓ = {𝑖 ∈ S𝐵 | ℓ ∈ L J𝑖 }.
+Constraint 1 (Computation-Completeness). Let 𝐵 be a block
+with state set S𝐵 = {1, 2, . . . , 2𝑁 − 1}, and let 𝑠𝑖 ∈ R≥0 denote the
+state workload for each state 𝑖 ∈ S𝐵. Let L𝐵 be the set of all layers
+contained in block 𝐵, and let Aℓ ⊆ S 𝐵 denote the involved state
+set for layer ℓ ∈ L 𝐵.
+The state workloads must satisfy the following constraint:
+∑︁
+𝑖 ∈ Aℓ
+𝑠𝑖 = 𝐵𝑆
+𝐵𝑆sub
+for all layers ℓ ∈ L 𝐵,
+where 𝐵𝑆 is the total batch size and 𝐵𝑆sub is the sub-batch size.
+This ensures that each layer processes the full batch exactly once,
+distributed across the states in which it is active.
+Building on the above definitions, we now establish the expres-
+sive capacity of the hierarchical scheduling abstraction. Specifically,
+we prove that any valid inter-layer execution pattern in a model
+whose computational graph forms a DAG—including architectures
+with branching and merging structures—can be represented using
+a hierarchical block composition with pipeline-derived states.
+Theorem 1 (Universality of Hierarchical Block Representa-
+tion). Any valid inter-layer scheduling behavior of a model with
+a DAG structure can be represented using a hierarchical block
+composition equipped with pipeline-derived execution states and
+associated workloads.
+Proof. Let computational graph of model be a DAG𝐺 = (L, 𝐸),
+where L is set of layers and 𝐸 denotes data dependencies. We con-
+struct a hierarchical representation by traversing 𝐺 topologically.
+Step 1: At every vertex with in-degree or out-degree exceeding
+one (branching or merging points), we partition 𝐺 and encapsulate
+each linear segment (a path of vertices with in-degree and out-
+degree equal to one) into a basic block. Each branching or merging
+vertex, together with its directly connected linear segments, forms
+a higher-level composite block. Recursively composing these blocks
+yields the top-level hierarchical block 𝐵⊤.
+Step 2: Consider any composite block consisting of ordered sub-
+blocks C𝐵 = {𝐵1, . . . , 𝐵𝑁 }, with canonical pipeline state set S𝐵 =
+{1, . . . , 2𝑁 − 1}. By assigning 𝑠𝑖, we can flexibly represent diverse
+execution schemes—sequential, pipelined, parallel, or combinations
+thereof. For example, in a fan-out scenario (where sub-block 𝐵1
+1254
+
+===== PAGE 7 =====
+
+MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea Yu Gong, Lingyi Huang, Haodong Chang, Rongjian Liang, Cheng Yang, Zhexiang Tang, Jiang Hu, and Bo Yuan
+produces data consumed by subsequent branches), assigning 𝑠1 =
+𝑠𝑁 +1 = 𝐵𝑆/𝐵𝑆sub and setting other 𝑠𝑖 = 0 demonstrates parallel
+execution. In a fan-in scenario (where sub-block 𝐵𝑁 merges earlier
+branches), assigning 𝑠𝑁 −1 = 𝑠2𝑁 −1 = 𝐵𝑆/𝐵𝑆sub captures merging
+behavior. These examples show workload assignments across state
+indices can express any valid sub-block execution pattern.
+Step 3: By recursively applying Steps 1 and 2 across the DAG,
+both linear and branched structures are covered. As the same hier-
+archical abstraction and scheduling semantics apply uniformly to
+basic and composite blocks, the top-level block𝐵⊤ fully captures the
+execution behavior of the original model. Hence, all legal inter-layer
+schedules can be represented via hierarchical block abstraction. □
+Remark 1 (Expressiveness Across DAG-Based Architectures).
+Architectures such as self-attention layers, ResNet bottlenecks with
+skip connections, and Inception modules in GoogleNet are all rep-
+resentable as feed-forward DAGs. Therefore, they fall within the
+scope of Theorem 1 and are fully expressible using the proposed
+hierarchical block abstraction.
+Having established that any valid inter-layer execution behavior
+can be represented through hierarchical blocks and pipeline-derived
+states, we now formulate the scheduling problem as a constrained
+optimization. This formulation captures both structural choices and
+numerical decisions:
+Problem 1 (Inter-layer Scheduling). Let L = {1, 2, . . . , 𝐿} be the
+set of all layers in the model. The inter-layer scheduling problem
+seeks to jointly determine:
+• a hierarchical block structure H, which recursively parti-
+tions L into nested blocks; and
+• a collection of state workloads {𝑠𝑖 }𝐵 ∈ H, 𝑖∈ S𝐵 , where each
+𝑠𝑖 ∈ R≥0 corresponds to a pipeline-derived execution state
+𝑖 ∈ S𝐵 of block 𝐵,
+so as to minimize the total execution cost:
+min
+H, {𝑠𝑖 }
+C ( H, {𝑠𝑖 } ) s.t.
+∑︁
+𝑖 ∈A ℓ
+𝑠𝑖 = 𝐵𝑆
+𝐵𝑆sub
+, ∀ℓ ∈ L
+Here, C (H, {𝑠𝑖 }) denotes the energy-delay product (EDP) of model
+execution, and Aℓ is involved state set of layer ℓ, as defined earlier.
+Remark 2 (Addressing Challenge #2: Flexible and General
+Scheduling). The hierarchical block abstraction, through its pipeline-
+derived states and flexible workload assignments, supports diverse
+sub-batch execution patterns—sequential, pipelined, or parallel. It
+also generalizes across various architectures with branches or skip
+connections. These capabilities directly address Challenge #2 by
+broadening the feasible scheduling space.
+The formulation above reveals that solving the scheduling prob-
+lem involves two types of decisions: determining the workload
+configuration within each block, and selecting the hierarchical
+organization of blocks across the model. These two components
+are structurally decoupled – each block’s schedule is governed by
+its local execution states, while the block hierarchy implicitly de-
+fines inter-block dependencies. In this paper Section 5 focuses on
+intra-block scheduling, and Section 6 explores construction and
+optimization of hierarchical block structure.
+5 Table-format Intra-Block Scheduling
+5.1 Representation of Execution Scheme
+Recording State Information Using the Scheduling Table. As
+analyzed above, the execution scheme of a block can be represented
+through combinations of execution states and their associated work-
+load values {𝑠𝑖 }. To facilitate visibility and manipulation of this
+execution structure, we introduce a table-based representation,
+called the Scheduling Table (ScT). This provides a structured and
+cumulative view of how sub-batch workloads are distributed across
+execution states and sub-blocks, offering a more intuitive and ana-
+lyzable form than listing state variables directly.
+Definition 4 (Scheduling Table (ScT)). For a block 𝐵 with sub-
+block sequence C𝐵 = {𝐵1, 𝐵2, . . . , 𝐵𝑁 } and pipeline-derived state
+set S𝐵 = {1, . . . , 2𝑁 − 1}, the scheduling table ScT ∈ R(2𝑁 −1) ×𝑁
+records the cumulative number of sub-batches processed by each
+sub-block across states.
+(i) ScT has 2𝑁 − 1 rows and 𝑁 columns. Row 𝑖 corresponds to
+State-𝑖, and column 𝑗 corresponds to sub-block 𝐵 𝑗 ∈ C𝐵.
+(ii) The entry ScT𝑖,𝑗 denotes the total number of sub-batches pro-
+cessed by sub-block 𝐵 𝑗 from State-1 through State-𝑖, inclusive.
+(iii) Let A𝐵 𝑗 ⊆ S𝐵 denote the involved state set of sub-block 𝐵 𝑗 .
+The cumulative processed sub-batches for 𝐵 𝑗 up to State-𝑖 is
+ScT𝑖,𝑗 =
+∑︁
+𝑘 ∈A 𝐵 𝑗 ∩{1,...,𝑖 }
+𝑠𝑘 .
+Constraint-Form Equivalence of Definition 5. As illustrated
+above, ScT𝑖,𝑗 are derived according to Definition 5. To enable inte-
+gration with our MILP formulation, we now express an equivalent
+set of constraints – Eqs. 1 through 6 – for computing ScT in a
+constraint-based format. Eq. 1 ensures that all entries in ScT are
+non-negative integers. Eqs. 2 and 3 define boundary conditions for
+execution: Eq. 2 corresponds to the stage range before any sub-
+block 𝐵 𝑗 becomes active (i.e., A𝐵 𝑗 ∩ { 1, . . . , 𝑖} = ∅), while Eq. 3
+corresponds to the point after 𝐵 𝑗 has completed execution (i.e.,
+A𝐵 𝑗 ∩ {1, . . . , 𝑖} = A𝐵 𝑗 ). Eq. 4 enforces the monotonicity of accu-
+mulated sub-batch processing for each sub-block. Eq. 5 encodes data
+dependencies using the binary variable𝑑𝑚,𝑗 ∈ D , where 𝑑𝑚,𝑗 = 1 if
+sub-block 𝐵 𝑗 depends on the output of sub-block 𝐵𝑚, and 𝑑𝑚,𝑗 = 0
+otherwise. This dependency set D is fixed once the model architec-
+ture is given, and its inclusion ensures that dependent sub-blocks
+are not assigned to overlapping states in a parallel pattern. Finally,
+Eq. 6 describes the cumulative accumulation of sub-batch workloads
+across states, consistent with the semantics of ScT.
+ScT𝑖,𝑗 ∈ N ∪ { 0} (1)
+ScT𝑖,𝑗 = 0, 𝑖 ∈ [ 1, . . . , 𝑗 − 1] (2)
+ScT𝑖,𝑗 = 𝐵𝑆 /𝐵𝑆sub, 𝑖 ∈ [ 𝑁 + 𝑗 − 1, . . . , 2𝑁 − 1] (3)
+ScT𝑖+1,𝑗 ≥ ScT𝑖,𝑗 (4)
+ScT𝑖,𝑚 ≥ ScT𝑖,𝑗 + 𝑑𝑚,𝑗 , 𝑖 ∈ [ 𝑗, . . . , 𝑁 + 𝑗 − 2] (5)
+ScT𝑖,𝑗 = 𝑠𝑖 + ScT𝑖 −1,𝑗 , 𝑖 ∈ [ 𝑗, . . . , 𝑁 + 𝑗 − 2] (6)
+5.2 Representation of Fusion Strategy
+While determining the state workloads {𝑠𝑖 } and constructing the
+scheduling table ScT fully specifies the execution scheme of a block,
+it does not capture memory-related behavior – particularly those
+associated with fusion strategies. These strategies directly affect
+1255
+
+===== PAGE 8 =====
+
+Crane: Inter-Layer Scheduling Framework for DNN Inference and Training Co-Support on Tiled Architecture MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea
+MappingState-BasedRepresentation
+12N……DRAM
+…………RRRRRRRRRDNN ModelTiled ArchitectureExecution Scheme
+Tiles
+TimeState-1s1State-2State-NState-2N-1s2s2sNsNsNs2N-1…Block B # of Processed Sub-batches 00State 1 0State 1~2State 1~NState 1~2N-1
+1 N2…s!
+……………s!+s" s"…s!+⋯+s"=BS/BS#$% s#s"+⋯+s#…BS/BS#$%BS/BS#$%BS/BS#$%…ScT
+Figure 4: State-based representation of execution scheme for mapping multiple layers onto a tiled architecture. The number of hardware tiles
+allocated to different layers within the same state is proportionally determined based on their computational costs.
+State
+Tiles1234State1State3(0:3](0:3]12
+State1ProcessingWritingState 3
+ScTMeT
+Maximum Index of Stored Sub-batchesMinimum Index of Stored Sub-batchesLayer Fusion Dataflow in SRAMDRAMSRAM in Tiles(0:3] in SRAM1ProcessingWriting
+# of Processed Sub-batches03State 103State 1~233State 1~312Min. Index of Stored Sub-batchesDSDSState10030DSDSState 20030DSDSState 30333
+12
+(0:3] in DRAM2PEs in TilesProcessing 1
+12DNN Model
+PEs in TilesInput of Index: [1][2][3]1 Output of Index: [1][2][3]1Processing 2DRAMOutput of Index: [1][2][3]2StateTiles1234State1State3(0:3](0:3]12
+State1ProcessingWritingState 3
+ScTMeT
+Maximum Index of Stored Sub-batchesMinimum Index of Stored Sub-batchesLayer Fusion Dataflow in SRAMDRAMSRAM in Tiles(0:3] in SRAM1ProcessingWriting
+# of Processed Sub-batches03State 103State 1~233State 1~312Min. Index of Stored Sub-batchesDSDSState10030DSDSState 20030DSDSState 30333
+12
+(0:3] in DRAM2PEs in TilesProcessing 1
+12DNN Model
+PEs in TilesInput of Index: [1][2][3]1 Output of Index: [1][2][3]1Processing 2DRAMOutput of Index: [1][2][3]2StateTiles1234State1State3(0:3](0:3]12
+State1ProcessingWritingState 3ScTMeT
+Maximum Index of Stored Sub-batchesMinimum Index of Stored Sub-batchesLayer Fusion Dataflow in SRAMDRAMSRAM in Tiles(0:3] in SRAM1ProcessingWriting
+# of Processed Sub-batches03State 103State 1~233State 1~312Min. Index of Stored Sub-batchesDSDSState10030DSDSState 20030DSDSState 30333
+12
+(0:3] in DRAM2PEs in TilesProcessing 1
+12DNN Model
+PEs in TilesInput of Index: [1][2][3]1 Output of Index: [1][2][3]1Processing 2DRAMOutput of Index: [1][2][3]2
+12DNN Model
+State
+Tiles1234State1State3(0:3](0:3]12
+State1ProcessingWritingState 3
+ScTMeT
+Maximum Index of Stored Sub-batchesMinimum Index of Stored Sub-batchesLayer Fusion Dataflow in SRAMDRAMSRAM in Tiles(0:3] in SRAM1ProcessingWriting
+# of Processed Sub-batches03State 103State 1~233State 1~312Min. Index of Stored Sub-batchesDSDSState10030DSDSState 20030DSDSState 30333
+12
+(0:3] in DRAM2PEs in TilesProcessing 1
+12DNN Model
+PEs in TilesInput of Index: [1][2][3]1 Output of Index: [1][2][3]1Processing 2DRAMOutput of Index: [1][2][3]2MeT
+State
+Tiles1234State1State3(0:3](0:3]12
+State1ProcessingWritingState 3
+ScTMeT
+Maximum Index of Stored Sub-batchesMinimum Index of Stored Sub-batchesLayer Fusion Dataflow in SRAMDRAMSRAM in Tiles(0:3] in SRAM1ProcessingWriting
+# of Processed Sub-batches03State 103State 1~233State 1~312Min. Index of Stored Sub-batchesDSDSState10030DSDSState 20030DSDSState 30333
+12
+(0:3] in DRAM2PEs in TilesProcessing 1
+12DNN Model
+PEs in TilesInput of Index: [1][2][3]1 Output of Index: [1][2][3]1Processing 2DRAMOutput of Index: [1][2][3]2
+ScT
+Figure 5: Example that how MeT and ScT jointly and implicitly capture the impact of fusion strategy on memory status. The 2-layer model is
+a top-level block with each layer as a sub-block. In State-1, all 3 sub-batches of Layer-1’s input data are transferred from DRAM to PEs for
+computation. The resulting outputs are then stored in on-chip SRAM, avoiding costly DRAM writes. Consequently, SRAM holds 3 sub-batches
+of outputs (indexed as 1, 2, 3) for Layer-1, while DRAM stores none. This is reflected in ScT1,1 = 3, indicating that 3 sub-batches are processed
+in State-1. Meanwhile, MeT𝑆
+1,1 = 0 defines the stored sub-batch range in SRAM as (0 : 3 ], and MeT𝐷
+1,1 = 3 defines the DRAM range as (3 : 3 ],
+confirming no data is stored in DRAM. In State-3, the 3 sub-batches stored in SRAM are directly sent to PEs for Layer-2 processing, eliminating
+DRAM access. After computation, the 3 sub-batches of Layer-2’s output data are stored in DRAM, and Layer-1’s intermediate results are evicted
+from SRAM. This is represented by MeT𝐷
+3,2 = 0 and ScT3,2 = 3, defining the sub-batch range of Layer-2’s output in DRAM as (0 : 3 ]. Additionally,
+MeT𝑆
+3,2 = 3 indicates no Layer-2’s output remains in SRAM (3, 3]. Similarly, MeT𝑆
+3,1 = MeT𝐷
+3,1 = 3 confirms that Layer-1’s outputs are stored neither
+in SRAM nor DRAM, precisely describing the final memory state.
+memory reuse, data lifetimes, and intermediate storage require-
+ments, which are not encoded in ScT alone.
+To model this dimension, we introduce the Memory Table MeT,
+which tracks the lifetime of intermediate data in memory. Specif-
+ically, MeT captures the allocation and deallocation dynamics of
+sub-batch-level intermediate results for each execution unit (e.g.,
+layer or sub-block), offering a structured and interpretable view
+of how fusion affects memory usage. Each fusion decision (the
+“action”) introduces implicit changes to memory behavior (the “im-
+pact”), influencing how long intermediate results must be stored
+and when memory can be released.
+Definition 5 (Memory Table (MeT)). For a block with sub-block
+sequence C𝐵 = {𝐵1, 𝐵2, . . . , 𝐵𝑁 } and state set S𝐵 = {1, . . . , 2𝑁 − 1},
+the memory table MeT ∈ R(2𝑁 −1) ×𝑁 ×2 tracks the memory status
+of intermediate data for each block or sub-block across states.
+(i) MeT has 2𝑁 −1 rows and 𝑁 columns, where row𝑖 corresponds
+to State-𝑖, and column 𝑗 corresponds to block 𝐵 𝑗 ∈ C𝐵.
+(ii) Each entry MeT𝑖,𝑗 is a tuple (MeT𝐷
+𝑖,𝑗 , MeT𝑆
+𝑖,𝑗 ), where:
+• MeT𝐷
+𝑖,𝑗 denotes the lower (open) bound of the sub-batch
+range stored in DRAM for sub-block 𝐵 𝑗 at State-𝑖;
+• MeT𝑆
+𝑖,𝑗 denotes the lower (open) bound of the sub-batch
+range stored in SRAM for sub-block 𝐵 𝑗 at State-𝑖.
+As defined above, MeT tracks the lower bound of sub-batches
+stored in memory. Meanwhile, ScT𝑖,𝑗 monitors the number of sub-
+batches processed for block 𝐵 𝑗 from State-1 to State-𝑖, effectively
+representing the upper (closed) bound of that range. Therefore,
+ScT and MeT together define the range of sub-batches stored in
+SRAM and DRAM, denoted as (MeT𝑆
+𝑖,𝑗 , ScT𝑖,𝑗 ] and (MeT𝐷
+𝑖,𝑗 , ScT𝑖,𝑗 ],
+respectively. Since the essence of layer fusion is to allocate inter-
+mediate data in SRAM to reduce costly DRAM accesses, MeT and
+ScT jointly capture the impact of fusion on memory behavior.
+Construction of MeT. In general, MeT is derived by follow-
+ing the construction rules. Eq. 7 ensures that the lower bounds of
+the sub-batches stored in memory are non-negative integers. Eq. 9
+enforces that these lower bounds cannot exceed the upper bound
+represented by ScT𝑖,𝑗 , which tracks the number of sub-batches
+processed. Furthermore, Eq. 8 enforces a non-decreasing order for
+the lower bounds as the state progresses, reflecting the policy that
+earlier sub-batches are discarded first when memory (SRAM or
+DRAM) capacity is insufficient to store all sub-batches. This is
+based on the observation that newly generated data is more likely
+to be required by future computations, whereas previously gener-
+ated sub-batches can be discarded temporarily. When sub-block 𝐵 𝑗
+depends on the data from sub-block 𝐵𝑚, Eq. 10 introduces a con-
+straint to ensure that, if the output of sub-block 𝐵𝑚 is required in
+memory, the necessary data is available in the previous state. Specif-
+ically, since ScT𝑖 −1,𝑗 represents the upper bound of the sub-batch
+index processed by sub-block 𝐵 𝑗 in State-(𝑖 − 1), the corresponding
+lower bound in State-𝑖 must be less than or equal to MeT𝑆
+𝑖 −1,𝑚 and
+1256
+
+===== PAGE 9 =====
+
+MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea Yu Gong, Lingyi Huang, Haodong Chang, Rongjian Liang, Cheng Yang, Zhexiang Tang, Jiang Hu, and Bo Yuan
+12DNN Model
+MeTFWMin. Index of Stored Sub-batchesDSDSState 32323……
+Step 1
+B2Loss
+B1
+(2:3](2:3]Equ.14# of Processed Sub-batches01State 101State 1~211State 1~3
+Min. Index of Stored Sub-batchesDSDSState 31111……Step 2# of Processed Sub-batches0001Status-12222Status-7
+Min. Index of Stored Sub-batchesDSDSDSDSStatus-722222222…………
+B2
+: RecomputationR2: BackwardB2
+ScTBW1MeTBW1
+ScTBW2 MeTBW2R1R2(0:2]Loss(0:2]
+B1B2(0:2](0:2]
+12DRAMOutput of Index: [3]1Output of Index: [3]2
+DRAMOutput of Index: [3]1Output of Index: [3]2 B1B2B1
+DRAMInput of Index: [1][2]1 B1B2R2R1 B1B2R2R1
+Forward
+State 1State 1~7State 7
+Figure 6: Recomputation Example. Consider a 2-layer model treated
+as a top-level block, with each layer as a sub-block. Suppose ScT3,1 =
+ScT3,2 = 3. After the forward pass, we have MeT𝐷
+3,1 = MeT𝐷
+3,2 = 2, indi-
+cating that the sub-batch range stored in DRAM for both Layer-1 and
+Layer-2 is (2, 3].In Step 1, these stored activations are used for back-
+ward propagation over sub-batch (2, 3], where the loss flows through
+Layer-2 and then Layer-1. This step involves only the backward
+pass and aligns with the optimization of ScT and MeT as defined in
+Eq. 14.In Step 2, recomputation is required for the evicted sub-batch
+(0, 2]. The input data for Layer-1 over this range is fetched from
+DRAM, and forward recomputation is performed for both layers,
+followed by the backward pass. This combined forward-backward
+workload also fits within the scheduling and memory optimization
+framework of ScT and MeT.
+MeT𝐷
+𝑖 −1,𝑚. This ensures that sub-block 𝐵𝑚’s output is available for
+sub-block 𝐵 𝑗 when needed. Eq. 11 and 12 define the maximum stor-
+age capacity for SRAM and DRAM, respectively. In these equations,
+𝑉𝑗 represents the size of one sub-batch of sub-block 𝐵 𝑗 ’s output,
+and ScT𝑖,𝑗 − MeT𝑆
+𝑖,𝑗 and ScT𝑖,𝑗 − MeT𝐷
+𝑖,𝑗 represent the number of
+sub-batches stored in SRAM and DRAM, respectively. These con-
+straints ensure that the total data stored in memory does not exceed
+the available capacity of SRAM (𝐶𝑎𝑝 𝑆) and DRAM (𝐶𝑎𝑝 𝐷).
+MeT𝑆
+𝑖,𝑗 ∈ N ∪ { 0} MeT𝐷
+𝑖,𝑗 ∈ N ∪ { 0} (7)
+MeT𝑆
+𝑖,𝑗 ≤ MeT𝑆
+𝑖+1,𝑗 MeT𝐷
+𝑖,𝑗 ≤ MeT𝐷
+𝑖+1,𝑗 (8)
+MeT𝑆
+𝑖,𝑗 ≤ ScT𝑖,𝑗 MeT𝐷
+𝑖,𝑗 ≤ ScT𝑖,𝑗 (9)
+min(MeT𝑆
+𝑖 −1,𝑚, MeT𝐷
+𝑖 −1,𝑚 ) ≤ ScT𝑖 −1,𝑗 if 𝑑𝑚,𝑗 = 1 (10)
+∑︁
+𝑗
+(ScT𝑖,𝑗 − MeT𝑆
+𝑖,𝑗 ) × 𝑉𝑗 ≤ 𝐶𝑎𝑝 𝑆 (11)
+∑︁
+𝑗
+(ScT𝑖,𝑗 − MeT𝐷
+𝑖,𝑗 ) × 𝑉𝑗 ≤ 𝐶𝑎𝑝 𝐷 (12)
+5.3 Representation of Recomputation Scheme
+As analyzed in Section 2.1, recomputation is a critical decision
+variable in inter-layer scheduling, particularly for DNN training.
+Next we introduce how to use ScT and MeT to describe the re-
+computation process during training. In general, determining a
+recomputation strategy requires answering two key questions.
+Question #1 (Where/Which): Which sub-blocks’ activations should
+be discarded and recomputed?
+Question #2 (How): How can forward recomputation be coordinated
+with backward pass in the context of sub-batch-based processing?
+Notably, the scheduling space for answering Question #1 is vast.
+As discussed in Section 2.2, there are approximately 2200 possi-
+ble checkpoint choices for recomputation in a 4-sub-batch-based
+ResNet-50. Fortunately, this extensive search space can be effec-
+tively integrated into the construction and optimization of ScT and
+MeT after the forward pass, as these two tables precisely track the
+sub-batches stored in SRAM and DRAM. In other words, once ScT
+and MeT are determined, the location and amount of activations to
+be recomputed are automatically identified.
+Answering Question #2 is more challenging due to the interac-
+tion between forward recomputation and backward propagation,
+creating a bi-directional processing flow. To address this, we pro-
+pose splitting the process into two distinct phases, each of which
+can be effectively described using ScT and MeT.
+Step-1: Backward Pass-only Pre-processing. As illustrated
+in Fig. 6, after forward propagation, a new pair of ScT and MeT
+tables are constructed to describe the action of backward propa-
+gating the sub-batches currently stored in DRAM. The goal in this
+phase is to consume as many of the DRAM-stored activations of
+sub-block 𝐵𝑚 required by sub-block 𝐵 𝑗 for the backward pass as
+possible. No further backward computation can occur in 𝐵 𝑗 until
+forward recomputation in 𝐵𝑚 generates the required data. The
+benefit of this ”pre-processing" arrangement is that it simplifies
+the data dependency of backward processing in each sub-block
+from two sources (stored activations and recomputed activations)
+to a single source (recomputed activations only). This ensures that
+the recomputation in Step-2 can always be performed prior to the
+backward computation, allowing ScT and MeT to represent the
+coupled recomputation and backward pass.
+To ensure the success of this arrangement, at the end of forward
+pass (State-(2𝑁 − 1)), the amount of stored activation results for
+sub-block 𝐵𝑚 should be no less than that of sub-block 𝐵 𝑗 . This
+brings a new constraint when constructing MeT for forward pass:
+MeT𝐷,𝐹𝑊
+2𝑁 −1,𝑚 ≥ MeT𝐷,𝐹𝑊
+2𝑁 −1,𝑗 if 𝑑𝑚,𝑗 = 1. (13)
+After optimizing forward-specificMeT(denoted asMeT𝐹𝑊 ) with
+constraints described in Eq. 7-12 and Eq. 13,ScT for Step-1, denoted
+as ScT𝐵𝑊 1, can be constructed using the same method as described
+in Section 5.1, as the processing in Step-1 is also one-directional.
+Specifically, Eq. 1-6 still serve as the constraints for table construc-
+tion. The only difference is that Eq. 2 and 3 are replaced by the
+following constraint, considering the consumption of stored activa-
+tion incurred by pre-processing (note that the indices of sub-batches
+in Eq. 14 are offset for consistency with physical meaning ofScT𝑖,𝑗 ):
+ScT𝐵𝑊 1
+𝑖,𝑗 =
+( 𝐵𝑆
+𝐵𝑆Sub − MeT𝐷,𝐹𝑊
+2𝑁 −1,𝑗 , for 𝑖 ∈ [ 𝑁 + 𝑗 − 1, . . . , 2𝑁 − 1]
+MeT𝐷,𝐹𝑊
+2𝑁 −1,𝑗 +1−𝐿 − MeT𝐷,𝐹𝑊
+2𝑁 −1,𝑗 , for 𝑖 ∈ [ 1, . . . , 𝑗 − 1]
+(14)
+Then, the corresponding MeT (MeT𝐵𝑊 1) can be derived from
+ScT𝐵𝑊 1, constrained by Eq. 7-12.
+Step-2: Forward Recomputation-then-Backward Pass.After
+Step-1, another pair of tables, denoted as ScT𝐵𝑊 2 and MeT𝐵𝑊 2,
+will be constructed. As illustrated in Fig. 6, the two tables in Step-2
+consist of 2𝐿 layers — the first and last 𝐿 layers correspond to the
+recomputation phase and the backward pass phase, respectively.
+1257
+
+===== PAGE 10 =====
+
+Crane: Inter-Layer Scheduling Framework for DNN Inference and Training Co-Support on Tiled Architecture MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea
+Notably, because in Step-2, recomputation is only performed to
+recover the previously discarded sub-batches of activation data, Eq.
+3 is replaced with the following constraint:
+ScT𝐵𝑊 2
+𝑖,𝑗 = MeT𝐷,𝐹𝑊
+2𝑁 −1,𝑗 𝑖 ∈ [ 𝑁 + 𝑗 − 1, · · ·, 2𝑁 − 1], (15)
+where MeT𝐷,𝐹𝑊
+2𝑁 −1,𝑗 is the index of the first sub-batch of activation
+stored for sub-block 𝐵 𝑗 in State-(2𝑁 − 1) during forward propa-
+gation, minus 1 (to account for the open bound), and equivalently
+represents the index of the last sub-batch discarded.
+5.4 Latency & Energy Evaluation
+Upon representing the execution scheme, fusion strategy, and re-
+computation scheme using ScT and MeT, we can construct perfor-
+mance model to evaluate latency and energy for a given scheduling
+configuration, preparing for scheduling space exploration.
+Latency Evaluation. The latency performance is modeled based
+on delays incurred from PE computation and data traffic.
+Computation-incurred Latency. At the hardware tile granularity,
+the computation-incurred latency of each state is determined by
+the workload and tile utilization. The workload of sub-block 𝐵 𝑗
+(which could be a single layer or multiple layers within a block) for
+processing one sub-batch, denoted as Workload𝑗 , is the number of
+FLOPs required by that sub-block. To evaluate hardware utilization,
+we follow the method adopted in SET: For 𝑇𝑖,𝑗 tiles allocated for
+sub-block 𝐵 𝑗 in State-𝑖, the corresponding utilization ratio 𝑢𝑖,𝑗 is
+calculated by mapping the four dimensions (dim𝑞) of one sub-batch
+onto the four factors of 𝑇𝑖,𝑗 (𝑘1
+𝑖,𝑗 × 𝑘2
+𝑖,𝑗 × 𝑘3
+𝑖,𝑗 × 𝑘4
+𝑖,𝑗 = 𝑇𝑖,𝑗 ) and
+calculating the product of utilization across these dimensions:
+𝑢𝑖,𝑗 =
+4Ö
+𝑞=1
+dim𝑞
+⌈ dim𝑞
+𝑘𝑞
+𝑖,𝑗
+⌉𝑘𝑞
+𝑖,𝑗
+. (16)
+Then the computation latency of sub-block 𝐵 𝑗 in State-𝑖 is as:
+𝐿comp,𝑖,𝑗 = Workload𝑗
+𝑢𝑖,𝑗 × 𝑇𝑖,𝑗 × 𝑃 , (17)
+where 𝑃 denotes the computing power per unit time for each tile.
+Since computation-incurred latency for a DNN in one state is deter-
+mined by the bottleneck sub-block in that state (as sub-blocks are
+processed concurrently within one state), and sub-block execution
+in different states happens sequentially, the overall computation-
+incurred latency 𝐿comp for the entire model can be calculated as:
+𝐿comp =
+∑︁
+𝑖
+𝑠𝑖 × max
+𝑗
+𝐿comp,𝑖,𝑗
+ . (18)
+Note that Eq. 18 describes the latency evaluation for forward
+propagation. It can be easily extended for backward propagation
+by including the computation of gradients.
+Data Traffic-incurred Latency.From the perspective of a hardware
+tile, the latency incurred by transferring its required input data
+consists of three parts: the cost incurred by reading data from
+DRAM, SRAM, and other hardware tiles. Since the tiled architecture
+uses NoC as a unified fabric to transfer data, the data traffic-incurred
+latency can be evaluated as:
+𝐿traffic =
+∑︁
+𝑖,𝑗,𝑚
+(Dep𝐶
+𝑚,𝑖,𝑗 𝐻𝐶 + Dep𝑆
+𝑚,𝑖,𝑗 𝐻𝑆 + Dep𝐷
+𝑚,𝑖,𝑗 𝐻𝐷 )𝑉𝑚/𝐵𝑊𝑁
++ Dep𝐷
+𝑚,𝑖,𝑗 𝑉𝑚/𝐵𝑊𝐷,
+(19)
+𝑩𝐒𝐮𝐛𝟏𝑩𝐒𝐮𝐛𝟏 𝑩𝐒𝐮𝐛4 𝑩𝐒𝐮𝐛6
+ScT
+𝑩𝐒𝐮𝐛2
+𝑩𝐒𝐮𝐛2 𝑩𝐒𝐮𝐛4 𝑩𝐒𝐮𝐛5
+𝑩𝐒𝐮𝐛3 𝑩𝐒𝐮𝐛4 𝑩𝐒𝐮𝐛5
+Forward
+Backward
+...
+...
+𝑩𝐒𝐮𝐛1𝑩𝐒𝐮𝐛1
+ScT
+ ScT
+𝑩𝐒𝐮𝐛4
+...
+...
+𝑩 𝐒𝐮𝐛6
+MeT ...
+ MeT...
+𝑩𝐒𝐮𝐛4
+MeT
+𝑩𝐒𝐮𝐛6
+ScT ...
+ ScT
+ ScT
+...
+MeT
+ MeT
+MeT
+𝑩𝐒𝐮𝐛3
+Schedule 
+Optimization
+Intra-layer 
+Exploration
+Sub-batch Size 
+Candidates
+R R
+R R
+1
+2
+3
+Input
+v
+Inference
+Training
+Forward
+vv
+𝑩𝐒𝐮𝐛𝟏𝑩𝐒𝐮𝐛𝟏
+v
+𝑩𝐒𝐮𝐛𝟏
+𝑩𝐒𝐮𝐛2𝑩𝐒𝐮𝐛2
+𝑩𝐒𝐮𝐛3𝑩𝐒𝐮𝐛3
+𝑩𝐒𝐮𝐛4𝑩𝐒𝐮𝐛4
+𝑩𝐒𝐮𝐛5𝑩𝐒𝐮𝐛5
+𝑩𝐒𝐮𝐛6𝑩𝐒𝐮𝐛6
+SRAM/DRAM 
+Capacity
+Intra-layer Exploration
+Intra-layer Exploration
+Output
+𝑩𝐒𝐮𝐛3𝑩𝐒𝐮𝐛3
+Optimal Sub-
+batch Size
+Optimal ScT
+t
+tiles
+Optimal MeT
+t
+DRAM Cap.
+t
+SRAM Cap.
+Forward
+ Backward
+DNN Model
+Tiled 
+Architecture
+... ...
+Select Top K2 Based on Cost trafficSelect Top K2 Based on Cost traffic
+Select Top K1 Based on Cost compSelect Top K1 Based on Cost comp
+... ... Select Top K3 Based on Cost compSelect Top K3 Based on Cost comp
+Select Top K4 Based on Cost trafficSelect Top K4 Based on Cost traffic
+v
+Figure 7: Overall intra-block exploration and optimization process.
+where 𝑉𝑚 is the storage size for one sub-batch of data and the
+corresponding weight, and 𝐵𝑊𝑁 is the bandwidth of NoC. Here,
+for data movement from sub-block 𝐵𝑚 to sub-block 𝐵 𝑗 in State-𝑖,
+Dep𝐶
+𝑚,𝑖,𝑗 , Dep𝑆
+𝑚,𝑖,𝑗 , and Dep𝐷
+𝑚,𝑖,𝑗 represent the amount of data trans-
+ferred from other hardware tiles, SRAM, and DRAM, respectively.
+Since ScT and MeT record all the computing and memory statuses
+for all sub-blocks, the amount of these three types of data trans-
+fer can be easily calculated from the two tables. Additionally, 𝐻𝐶,
+𝐻𝑆, and 𝐻𝐷 represent the hop counts for transferring these data
+through NoC, while 𝐵𝑊𝐷 represents the bandwidth of DRAM. The
+latency for data sourced from DRAM is included in Eq. 19 since it
+is transferred via NoC but must first be read from the DRAM.
+Energy Evaluation. Energy costs are evaluated similarly by
+considering the consumption due to computation and data traffic.
+Computation-incurred Energy Consumption. Eq. 20 describes the
+evaluation model for computation-incurred energy cost ( 𝐸comp).
+Here, 𝐸comp, unit is the unit energy consumption for each opera-
+tion, and 𝑠𝑖 Workload𝑗
+𝑢𝑖,𝑗 represents the equivalent number of FLOPs
+required for computation, adjusted for the tile utilization.
+𝐸comp = 𝐸comp, unit ×
+∑︁
+𝑖,𝑗
+𝑠𝑖Workload𝑗
+𝑢𝑖,𝑗
+. (20)
+Data Traffic-incurred Energy Consumption. For the tiled architec-
+ture, the energy consumption due to data traffic has two sources:
+data movement through NoC and from/to DRAM. Eq. 21 describes
+the evaluation of the total energy cost incurred by transferring data
+at the tile level. Here,𝐸NoC, unit and 𝐸DRAM, unit are the unit energy
+consumption per hop and access, respectively.
+𝐸traffic =
+∑︁
+𝑖,𝑗,𝑚
+𝑉𝑚𝐸NoC, unit (Dep𝐶
+𝑚,𝑖,𝑗 𝐻𝐶 + Dep𝑆
+𝑚,𝑖,𝑗 𝐻𝑆 +
+Dep𝐷
+𝑚,𝑖,𝑗 𝐻𝐷 ) + 𝑉𝑚𝐸DRAM, unitDep𝐷
+𝑚,𝑖,𝑗 .
+(21)
+5.5 Overall Exploration & Optimization Process
+Based on the table-format schedule representations and the mod-
+eled cost function for hardware performance, we are now ready to
+describe the automatic exploration process for inter-layer schedul-
+ing. Note that selecting the proper batch splitting plan (𝐵𝑆sub), as
+another important decision factor affecting the overall scheduling
+scheme, will be integrated into the search process.
+Fig. 7 shows the overall exploration for inter-layer scheduling.
+Given the pre-determined batch size 𝐵𝑆 by the workload, we first
+enumerate all its factors as the candidates for 𝐵𝑆sub. Then, for each
+1258
+
+===== PAGE 11 =====
+
+MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea Yu Gong, Lingyi Huang, Haodong Chang, Rongjian Liang, Cheng Yang, Zhexiang Tang, Jiang Hu, and Bo Yuan
+possible 𝐵𝑆sub, the corresponding ScT is built with the constraints
+described by Eq. 1 - 6. Since all constraints are linear, we can ap-
+ply piecewise linear approximation and solve the problem using
+an MILP solver to find the corresponding 𝑠𝑖’s that minimize the
+computation-related EDP, a bilinear term that can be linearized via
+McCormick envelope [25]:
+{𝑠𝑖 }opt = arg min
+{𝑠𝑖 }
+𝐿𝑝
+comp × 𝐸𝑞
+comp, (22)
+where 𝑝 and 𝑞 are hyper-parameters setting the importance of
+latency and energy, respectively. With the above-identified 𝑠𝑖’s, we
+can specify ScT’s and further calculate the corresponding mini-
+mized EDP cost for each 𝐵sub candidate. After preserving 𝐾1 pos-
+sible 𝐵sub’s with the smallest𝐾1 𝐿𝑝
+comp × 𝐸𝑞
+comp’s, we further use
+them and the corresponding 𝑠𝑖’s to build𝐾1 MeT’s. Again, an MILP
+solver is applied to minimize the data traffic-related EDP cost:
+{MeT𝐷
+𝑖,𝑗 , MeT𝑆
+𝑖,𝑗 }opt = arg min
+{MeT𝐷
+𝑖,𝑗 ,MeT𝑆
+𝑖,𝑗 }
+𝐿𝑝
+traffic × 𝐸𝑞
+traffic. (23)
+The candidate list for 𝐵sub is then further shrunk by preserving
+only 𝐾2 𝐵sub’s that correspond to the smallest𝐿𝑝
+traffic×𝐸𝑞
+traffic’s. Note
+that for the training workload, another round of table construction
+and 𝐵sub candidate reduction are needed.
+Finally, intra-layer scheduling is applied to the remaining 𝐾2
+candidates to update total latency and energy consumption after
+considering the optimization within each hardware tile as follows:
+𝐿Total = max
+ ∑︁
+𝑖
+𝑠𝑖 × max
+𝑗
+𝐿comp,𝑖,𝑗 𝛼𝑖,𝑗
+ , 𝐿traffic +
+∑︁
+𝑖,𝑗
+𝛽𝑖,𝑗
+!
+, (24)
+𝐸Total = 𝐸comp, unit ×
+∑︁
+𝑖,𝑗
+𝑠𝑖Workload𝑗 𝛼𝑖,𝑗
+𝑢𝑖,𝑗
++ 𝐸traffic +
+∑︁
+𝑖,𝑗
+𝛾𝑖,𝑗 , (25)
+where 𝛼𝑖,𝑗 is the factor considering the actual hardware utiliza-
+tion for processing sub-block 𝐵 𝑗 in State-𝑖. 𝛽𝑖,𝑗 and 𝛾𝑖,𝑗 are the
+corresponding data traffic-related latency and energy consumption
+associated with intra-layer scheduling. Here, 𝛼𝑖,𝑗 , 𝛽𝑖,𝑗 , and 𝛾𝑖,𝑗 are
+obtained from the intra-layer scheduler. Thanks to the abstraction
+of hardware tiles in inter-layer scheduling, the existing intra-layer
+schedulers can be easily applied to our framework as a plug-in.
+Remark 3 (Addressing Challenge #1: Unified Representation
+of Core Scheduling Factors ). The ScT and MeT table formats,
+together with sub-batch size selection (𝐵𝑆sub), provide a unified and
+extensible representation of inter-layer scheduling behavior. These
+tables explicitly record execution states and memory status, which
+are determined by four design factors (E,P,R,B). This joint represen-
+tation ensures that all key design factors are consistently captured
+within a single framework—directly addressing Challenge #1.
+Remark 4 (Addressing Challenge #3: Structured and Exhaus-
+tive Scheduling via MILP ). The table-based formulation using
+ScT and MeT naturally leads to an MILP, which encodes scheduling
+constraints with high structural regularity. This enables exhaustive
+exploration of the scheduling space using off-the-shelf MILP solvers,
+offering both fast convergence and globally optimal solutions for
+intra-block scheduling—effectively addressing Challenge #3.
+6 Hierarchical Structure Optimization
+After optimizing intra-block scheduling, the next step is to optimize
+hierarchical block structure. This involves refining the arrangement
+and organization of blocks to improve the overall scheduling effi-
+ciency. To that end, we propose an iterative two-step solution:
+Step-1: Graph Partition. In this step, the DNN model is parti-
+tioned based on the dependency relationships between layers in its
+computational graph. Specifically, layers are grouped into blocks
+by examining these dependencies. If layers form a sequential de-
+pendency chain, where each layer directly depends on the previous
+one and only outputs its result to the next, they are combined into
+a single block. For example, Layer-2 in Fig. 8 solely depends on
+Layer-1, and Layer-3 solely depends on Layer-2, so Layers-2 and
+-3 are grouped into Block-B. When a layer or block has multiple
+dependencies or outputs its results to multiple layers or blocks, a
+higher-level block is formed to capture these relationships. Addi-
+tionally, each layer can also function as a single block, enabling
+flexible sub-batch size optimization. Following these principles,
+Block-A and Block-C are constructed to contain Layer-1 and Layer-
+4, respectively, while Block-D is formed by consolidating Block-A,
+B, and C, thus capturing all inter-block dependencies.
+Step-2: Gradual Partition. This step optimizes overall schedul-
+ing scheme by incrementally updating and optimizing lower-level
+blocks. Initially, the workload of each partitioned block is set as the
+corresponding FLOP counts, without considering tile utilization.
+Similarly, the initialization of data traffic for each block does not
+account for impact of potential optimization in lower-level blocks.
+The optimization process begins with top-level block, for example,
+Block-D in Fig. 8. From the perspective of Block-D, lower-level
+blocks (Block-A, B, and C) serve as component layers. We optimize
+the inter-layer scheduling for Block-D using the process illustrated
+in Fig. 7, where the cost evaluation is based on the FLOPs and data
+traffic information of component blocks. After finishing the sched-
+ule optimization for Block-D, the newly obtained optimal cost is
+compared with the initial cost (initially set to zero). If the difference
+exceeds a pre-set threshold 𝜃, the scheduling for Block-A, B, and C
+will be re-optimized. For each lower-level block, the batch size, allo-
+cated hardware tiles, and available SRAM capacity may be updated
+after optimizing the top-level block. These updated parameters are
+then used in the schedule optimization for the lower-level block.
+As shown in Fig. 8, cost-driven block partitioning process is
+used to identify optimal block structure for each lower-level block.
+Consider Block-B as an example. Since it consists of two layers,
+two possible scenarios are evaluated: (1) Layer-2 and Layer-3 are
+treated as separate blocks without forming a higher-level block, (2)
+they form a hierarchical nested block. After optimizing for both
+cases, block structure with lower cost is selected as optimal struc-
+ture for these layers. This gradual partitioning is performed for all
+hierarchical nested block structures until reaching bottom level.
+Iterative Update. Once the optimization of lower-level blocks
+is complete, the workload and data traffic for each block are de-
+termined and passed back to the higher-level block. Based on this
+updated information, the scheduling for the higher-level block is
+re-optimized. This iterative procedure continues until a predefined
+convergence condition for the top-level block is met.
+7 Evaluation
+7.1 Validation of Cost Evaluator
+Crane is implemented in C++ for comprehensive scheduling ex-
+ploration. To validate its cost model, we compare it to SET, which
+reports less than 3% deviation from cycle-accurate simulations of
+1259
+
+===== PAGE 12 =====
+
+Crane: Inter-Layer Scheduling Framework for DNN Inference and Training Co-Support on Tiled Architecture MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea
+zz
+1234
+ABCD1234
+Schedule Optimization of Block-D
+Step-1Graph Partition
+WorkloadA, TrafficAWorkloadB, TrafficBWorkloadC, TrafficC
+Block-ABlock-C
+YesCostNew− CostPrev< 𝜽
+Block-B
+23B2ESchedule Optimization of Block-EFSchedule Optimization of Block-F2GH3BSchedule Optimization of Block B
+23
+State
+Tiles2233Lower Cost
+WorkloadBTrafficB
+NoWorkload & Traffic Iterative UpdateLower Block Opt.3
+Step-2Gradual PartitionTiles
+1369
+ABC
+D
+StateScheduling of Nested Blocks
+Output
+Figure 8: Exploration and optimization process using nested block-based representation. The schedule optimization module refers to Fig. 7.
+multi-tile compute and memory access behavior using zsim [ 30]
+and DRAMSim2 [29]. Both Crane and SET employ brute-force intra-
+layer scheduling. During validation, individual inter-layer schedul-
+ing is disabled and replaced with a common manually configured
+scheme, and hardware settings match those of SET. We evaluate var-
+ious DNN models (VGG, ResNet-50, Transformer-Large, Inception-
+V3) across different batch sizes. Results show Crane achieves 1%
+deviation from SET and 4% transitive deviation from cycle-accurate
+simulation baselines, confirming high fidelity of our cost model.
+7.2 Evaluation on Inference
+Baseline. We compare our approach with Tangram and SET by
+enabling their respective inter-layer scheduling processes. Unlike
+Crane, which supports both inference and training, these frame-
+works are designed for inference. To ensure a fair comparison, we
+disable Crane’s exploration and optimization for recomputation
+and the backward pass, focusing only on inference performance.
+Hardware Configuration. For fair comparison, we follow SET
+by adopting the NVDLA-style architecture as the hardware tile for
+both 16-tile edge-side and 144-tile cloud-side platforms, operated
+at 1GHz clock frequency with TSMC 12nm process. Each tile is
+equipped with 𝑃 = 1024 int8 MACs and a 1 MB SRAM. The energy
+consumption for each MAC operation is 𝐸𝑐𝑜𝑚𝑝,𝑢𝑛𝑖𝑡 = 0.018 pJ/op.
+We adopt a meshed NoC to connect the tiles, with a bandwidth of
+𝐵𝑊𝑁 𝑜𝐶 = 24 GB/s, and the unit energy consumption for each hop
+is 𝐸𝑁 𝑜𝐶,𝑢𝑛𝑖𝑡 = 0.7 pJ/bit. Following SET, the DRAM bandwidth is
+set as 𝐵𝑊𝐷 = 0.5 GB/TOPs (i.e., 16 GB/s, 144 GB/s for edge-side and
+cloud-side architecture, respectively), and the corresponding unit
+energy consumption is 𝐸𝐷𝑅𝐴𝑀,𝑢𝑛𝑖𝑡 = 7.5 pJ/bit. DRAM capacity
+is not constrained here since inference is not sensitive to it. The
+energy consumption for various register, buffer and SRAM sizes
+associated with the intra-layer exploration is obtained via ARM
+Memory Compiler [ 1]. To explore the search space, we set the
+hyperparameter in our framework as 𝐾1 = ⌈0.5 × 𝑁𝐶𝑎𝑛𝑑𝑖𝑑𝑎𝑡𝑒 ⌉,
+and 𝐾2 = ⌈0.2 × 𝑁𝐶𝑎𝑛𝑑𝑖𝑑𝑎𝑡𝑒 ⌉, where 𝑁𝐶𝑎𝑛𝑑𝑖𝑑𝑎𝑡𝑒 is the candidate
+amount of the𝐵𝑆𝑢𝑏 . 𝜃 is configured as2%×𝐶𝑜𝑠𝑡 𝑃𝑟𝑒𝑣 . The parameters
+𝑝 = 1, 𝑞 = 1 are specified in the cost function.
+Workloads & Performance. We benchmark ResNet-50 and
+GoogleNet on ImageNet, as well as Transformer-Large (12 layers,
+16 heads, sequence length 512, hidden dimension 1024), GPT-2 (16
+layers, 16 heads, sequence length 1024, hidden dimension 1024), and
+OPT-6.7B (32 layers, 32 heads, sequence length 2048, hidden dimen-
+sion 4096) with various batch sizes (𝐵𝑆). These models are evaluated
+as workloads on both edge and cloud-side platforms. Fig. 9 shows
+the latency and energy performance achieved by the optimal sched-
+uling strategies from schedulers. It is seen that Crane substantially
+outperforms Tangram and SET. Compared with Tangram, Crane
+reduces latency by 1.70× – 3.30×, cuts energy consumption by
+0.84× – 1.49×, and lowers EDP by 1.87× – 4.20×. In comparison to
+SET, Crane achieves latency reductions of1.12× – 3.02× (averaging
+1.64×), decreases energy consumption by 1.01× – 1.38× (averaging
+1.21×), and reduces EDP by 1.13× – 4.17× (averaging 1.84×).
+Comparison with TileFlow. We also evaluate the performance
+of Crane against TileFlow on a 4 × 4 tiled architecture with a batch
+size of 64. Fig. 10 shows Crane outperforms TileFlow significantly:
+for ResNet-50, it achieves 28% lower latency, 39% lower energy
+consumption, and a 56% reduction in EDP. For BERT-Base, the
+corresponding reductions are 13%, 17%, and 28%, respectively.
+7.3 Evaluation on Training
+Baseline. To evaluate training performance of Crane, we com-
+pare its results with those of MBS [23], an inter-layer scheduling
+method specialized for DNN training. MBS employs batch-splitting
+and layer fusion strategies to optimize data traffic and accelerate
+training on tiled accelerators. Additionally, since SET and Tangram
+are specifically designed for inference and its source code does
+not support training workloads, and in particular, it lacks support
+for recomputation, we estimate the potential performance of a
+hypothetical training-oriented SET and Tangram by applying the
+scheduling optimization from inference-only scheduling separately
+to forward and backward passes. The total estimated cost is then
+obtained by summing the resulting latency and energy metrics.
+Hardware Configuration. For fair comparison, we follow the
+settings of MBS and configure the target computing platform with
+two tiled systolic array. Each hardware tile features a MAC array
+size of 𝑃 = 16384 (128 × 128) and 10 MB of SRAM. For high-
+bandwidth data movement, the on-chip NoC bandwidth (𝐵𝑊𝑁 𝑜𝐶)
+is set to 100 GB/s, with energy consumption of 𝐸𝑁 𝑜𝐶,𝑢𝑛𝑖𝑡 = 0.7
+pJ/bit. Additionally, a 32 GB HBM2 off-chip memory provides a
+bandwidth of 𝐵𝑊𝐷 = 300 GB/s, consuming 𝐸𝐷𝑅𝐴𝑀,𝑢𝑛𝑖𝑡 = 3.9 pJ/bit
+[27]. Our evaluation follows the intra-layer computation scheme
+proposed in MBS. The search hyper-parameters are configured
+as 𝐾3 = ⌈0.1 × 𝑁𝐶𝑎𝑛𝑑𝑖𝑑𝑎𝑡𝑒 ⌉ and 𝐾4 = ⌈0.05 × 𝑁𝐶𝑎𝑛𝑑𝑖𝑑𝑎𝑡𝑒 ⌉, while
+other parameters adhere to the configurations in Section 7.2. For
+the comparison with the hypothetical training-oriented SET, the
+cloud-side architecture is utilized and the configurations remain
+the same except DRAM size is set as 128 GB for training procedure.
+Workloads & Performance. For the training evaluations with
+MSB, we select the ResNet-50, ResNet-101, Inception-V3, and Inception-
+V4 models. These models are trained on the ImageNet dataset using
+a batch size of 256. As illustrated in Fig. 11, the scheduling gener-
+ated by our framework outperforms MBS’s solution with respect to
+1260
+
+===== PAGE 13 =====
+
+MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea Yu Gong, Lingyi Huang, Haodong Chang, Rongjian Liang, Cheng Yang, Zhexiang Tang, Jiang Hu, and Bo Yuan
+00.511.522.53
+00.20.40.60.811.21.41.6
+TangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneNormalized Latency
+Normalzied Energy Consumption
+(a) Edge-Side ArchitectureResNet50GoogleNetB = 1B = 8B = 64Transformer-LargeB = 1B = 8B = 64B = 1B = 8B = 64B = 1B = 8B = 64B = 1B = 8B = 64GPT-2OPT-6.7B
+00.511.522.533.5
+00.20.40.60.811.21.41.6
+TangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneTangramSETCraneNormalized Latency
+Normalzied Energy Consumption
+(b) Cloud-Side ArchitectureResNet50GoogleNetB = 1B = 8B = 64Transformer-LargeB = 1B = 8B = 64B = 1B = 8B = 64B = 1B = 8B = 64B = 1B = 8B = 64GPT-2OPT-6.7B
+Figure 9: Performance of inter-layer schedulers for inference workloads. Compared with Tangram, Crane reduces energy-delay product (EDP)
+by 1.87× – 4.20× (averaging 3.03×) across all platforms, models, and batch sizes, and by 1.13× – 4.17× (averaging 1.84×) compared with SET. The
+average runtime speedup for scheduling achieved by Crane is 2.82× and 156.20× compared to SET and Tangram, respectively.
+00.51
+LatencyEnergyEDPLatencyEnergyEDPResNet50Bert-Base
+Normalized Performance
+TileFlowOurs
+Figure 10: Crane achieves 28%, 39%, and 56% reductions over TileFlow
+in latency, energy and EDP, respectively, on ResNet50. On Bert-Base,
+Crane delivers 13%, 17%, and 28% reductions in the same metrics.
+036912
+SETTangramSETTangramSETTangramSETTangramResNet50Transformer-largeGPT-2OPT-6.7B
+Normalized Reduction (Times)LatencyEnergy ConsumptionDRAM Traffic
+01234
+ResNet50ResNet101InceptionV3InceptionV4
+Normalized Reduction (Times)
+LatencyEnergy ConsumptionDRAM Traffic
+(a) Comparison with MBS
+(b) Comparison with hypothetical training-oriented SET and Tangram
+Out-of-memory error in SET and Tangram
+Figure 11: Performance of inter-layer schedulers for training work-
+load. (a) Crane outperforms MBS with 1.42× – 2.22× lower DRAM
+data traffic and 3.62× – 5.36× lower EDP. (b) Compared to training-
+oriented SET, Crane reduces DRAM traffic by 2.76×–2.97× and EDP
+by 11.01×–21.01×; against Tangram, the reductions are 4.81×–5.72×
+and 45.43×–64.73×, respectively. Notably, SET and Tangram fail to
+schedule OPT-6.7B due to out-of-memory, while Crane successfully
+generates a DRAM-feasible schedule.
+latency, energy consumption, DRAM data traffic, and total EDP cost
+per training step, achieving reduction of 1.64×, 2.54×, 1.67×, and
+4.18× on average across various models. These advancements are
+attributed to two primary factors: 1) MBS adopts a layer sequential
+processing pattern, whereas Crane applies a combination of three
+patterns for scheduling; and 2) MBS relies on a heuristic approach
+to determine batch splitting and layer fusion settings, while our
+framework optimizes all the four design factors of scheduling.
+To compare with hypothetical training-oriented SET and Tan-
+gram, we select ResNet-50 on ImageNet, Transformer-Large, GPT-2,
+and OPT-6.7B as models for training evaluation results. The batch
+size for training is 128. As shown in Fig. 11, Crane reduces latency by
+5.16×–6.96×, energy consumption by2.15×–3.04×, and DRAM traf-
+fic by 2.76×–2.97× over SET, achieving 11.01×–21.01× lower EDP.
+00.20.40.60.811.2
+32168421
+Normalized PerformanceSub-batch Size
+EnergyLatencyEDP
+Figure 12: Energy, latency, and EDP of ResNet-50 training under
+varying sub-batch sizes, with a fixed total batch size of 32. A sub-
+batch size of 32 (i.e., no batch splitting) results in much higher costs,
+highlighting the importance of effective batch splitting plan (B).
+00.511.5
+VGG16ResNet50Transformer-LargeInceptionV4VGG16ResNet50Transformer-LargeInceptionV4Memory Capacity RequirementData Access
+Normalized Performance
+Without RecomputationWith Recomputation
+DRAM Capacity RequirementDRAM Access
+Figure 13: With recomputation enabled, Crane largely reduces
+DRAM capacity requirement with minor overhead (Batch size= 64).
+Compared to Tangram, Crane reduces latency by 7.86×–10.26×,
+energy by 5.69×–6.41×, and DRAM traffic by 4.81×–5.72×, leading
+to 45.43×–64.73× EDP savings. Notably, the hypothetical training-
+oriented SET and Tangram cannot explore the inter-layer schedule
+for OPT-6.7B training due to an out-of-memory error. This occurs
+because the memory consumption for training this model exceeds
+DRAM capacity, while their searched schedule lacks the ability
+to explore recomputation opportunities that could reduce mem-
+ory usage. In contrast, Crane successfully generates an optimized
+schedule that enables training within the given DRAM budget.
+7.4 Ablation Study & Analysis
+Impact of Batch Splitting (B). As shown in Figure 12, using no
+batch splitting (i.e., a sub-batch size of 32) results in higher energy,
+latency, and EDP compared to configurations with smaller sub-
+batches, demonstrating the effectiveness of batch-level partitioning.
+Additionally, the results reveal a trade-off between computation
+and data movement overhead. Smaller sub-batches improve on-
+chip buffer utilization and allow more aggressive layer fusion, thus
+reducing memory access cost. However, they also lead to lower PE
+utilization and repeated loading of weight data, which increases
+computation overhead. Crane’s search process can systematically
+explore this trade-off to identify an optimal sub-batch configuration.
+1261
+
+===== PAGE 14 =====
+
+Crane: Inter-Layer Scheduling Framework for DNN Inference and Training Co-Support on Tiled Architecture MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea
+00.51
+PipelineSequentialFlexible SchemePipelineSequentialFlexible SchemeResNet50Transformer-large
+NormalizedPerformance
+LatencyEnergy ConsumptionEDP
+Figure 14: When exploring execution scheme is enabled, Crane iden-
+tifies better scheduling solution with reduced latency, energy and
+EDP. Model inference on cloud architecture with batch size 64.
+01000020000300004000050000Time(cycles)12435
+1615
+67891012111314Tiles
+01000020000300004000050000Time(cycles)12435
+1615
+67891012111314Tiles
+(a) Execution Graph of SET(b) Execution Graph of Crane
+Figure 15: Tile-Time schedule for Inception inference (Crane vs SET).
+Impact of Recomputation (R). Fig. 13 shows that enabling
+recomputation in Crane reduces DRAM capacity requirements by
+2.2× on average, with only a modest 0.125× increase in data access
+overhead. This demonstrates the value of integrating recomputation
+strategies into the scheduling framework for training efficiency.
+Impact of Execution Scheme (E). Fig. 14 highlights the im-
+portance of exploring execution schemes. With this exploration
+enabled, Crane achieves average reductions of 2.6× in latency, 1.8×
+in energy, and 4.7× in EDP compared to the case turning off ex-
+ecution scheme search. These gains stem from mitigating data
+reloading overheads in sequential scheduling and reducing pipeline
+bubbles in fully pipelined execution.
+Finer-Grained Sub-batch Optimization Analysis. We use
+an inference example of Inception-ResNet-V1 model on edge-sided
+accelerator with 𝐵𝑆 = 2 and 𝐵𝑆𝑠𝑢𝑏 = 1 to demonstrate how the
+scheduling derived from our framework eliminates bubble overhead,
+as shown in Fig. 15. Each colored block represents a layer, with the
+horizontal axis representing the execution time and the vertical
+axis indicating the allocated tiles for that layer. Unlike SET, which
+restricts the search space to coarse-grained sub-batch scheduling,
+Crane expands the space to support flexible mappings across sub-
+batches of different layers. This broader exploration enables higher
+hardware performance through finer-grained scheduling.
+Runtime Analysis. The end-to-end runtime of all frameworks
+is evaluated on an AMD EPYC 7402P CPU. Compared to SET and
+Tangram, Crane achieves 2.82× and 156.20× speedup, respectively.
+This substantial gain—despite Crane’s larger search space—is en-
+abled by three key factors: (1) For a given 𝐵sub, each block’s opti-
+mization is formulated as an MILP problem solvable by efficient
+solvers; (2) The hierarchical search space is effectively pruned by
+(a) restricting sub-batch exploration to Top-𝐾1, 𝐾2 candidates based
+on 𝐶𝑜𝑠𝑡 comp and 𝐶𝑜𝑠𝑡 traffic, and (b) applying cost-driven block re-
+finement to avoid enumerating poor nested structures; (3) The de-
+terministic, hierarchical refinement process—alternating between
+00.20.40.60.811.2
+0510152025
+4681012
+Normalized Runtime
+Cost (ms x mJ)CostRuntime 00.20.40.60.811.2
+051015202530
+05101520
+Normalized Runtime per Iteration
+Cost(ms x mJ)CostRuntime
+𝜽(Percentage of Previous Cost ) 𝑲𝟐(a) Sensitivity of 𝜽 (b) Sensitivity of 𝑲𝟐
+Figure 16: Runtime and EDP cost analysis of 𝜃 and 𝐾2. Increasing 𝜃
+and decreasing 𝐾2 reduce runtime but raise cost.
+high-level and lower-level blocks—achieves fast convergence, un-
+like the slower, randomized simulated annealing used in SET.
+Sensitivity Analysis. The parameters 𝐾1–𝐾4 and 𝜃 affect run-
+time and scheduling quality: 𝐾1–𝐾4 control the number of sub-
+batch candidates retained per iteration (impacting per-step run-
+time), while 𝜃 sets the total number of iterations. Fig. 16 shows for
+VGG inference on an edge platform, increasing these values im-
+proves scheduling but increases runtime. Notably, the same 𝐾1–𝐾4
+and 𝜃 are used across all experiments in Section 7.2 and 7.3.
+8 Conclusion
+We present Crane, a unified inter-layer scheduling framework for
+tiled architectures that supports both inference and training. By
+leveraging a hierarchical table-format representation, Crane cap-
+tures essential design factors, enables flexible scheduling, and trans-
+forms scheduling into a structured optimization problem. Experi-
+mental results show substantial gains over existing works.
+Acknowledgments
+This work was supported in part by the National Science Foundation
+under Grants CCF-2529764, CCF-2425399 and CCF-2529763, and
+by a Hans Fischer Senior Fellowship at the Technical University of
+Munich.
+References
+[1] [n. d.]. ARM Downloads Beta - Artisan . https://developer.arm.com/downloads-
+beta/search?term=artisan
+[2] Manoj Alwani, Han Chen, Michael Ferdman, and Peter Milder. 2016. Fused-Layer
+CNN Accelerators. In 2016 49th Annual IEEE/ACM International Symposium on
+Microarchitecture (MICRO). IEEE, 1–12.
+[3] Chen Bai, Xuechao Wei, Youwei Zhuo, Yi Cai, Hongzhong Zheng, Bei Yu, and
+Yuan Xie. 2024. Klotski v2: Improved DNN Model Orchestration Framework for
+Dataflow Architecture Accelerators. IEEE Transactions on Computer-Aided Design
+of Integrated Circuits and Systems (2024).
+[4] Olivier Beaumont, Lionel Eyraud-Dubois, and Alena Shilova. 2021. Efficient
+Combination of Rematerialization and Offloading for Training DNNs. Advances
+in Neural Information Processing Systems 34 (2021), 23844–23857.
+[5] Jingwei Cai, Yuchen Wei, Zuotong Wu, Sen Peng, and Kaisheng Ma. 2023. Inter-
+Layer Scheduling Space Definition and Exploration for Tiled Accelerators. In
+Proceedings of the 50th Annual International Symposium on Computer Architecture .
+1–17.
+[6] Hongzheng Chen, Cody Hao Yu, Shuai Zheng, Zhen Zhang, Zhiru Zhang, and
+Yida Wang. 2024. Slapo: A Schedule Language for Progressive Optimization of
+Large Deep Learning Model Training. InProceedings of the 29th ACM International
+Conference on Architectural Support for Programming Languages and Operating
+Systems, Volume 2. 1095–1111.
+[7] Yonggan Fu, Yongan Zhang, Yang Zhang, David Cox, and Yingyan Lin. 2021.
+Auto-NBA: Efficient and Effective Search over the Joint Space of Networks,
+Bitwidths, and Accelerators. In International Conference on Machine Learning .
+PMLR, 3505–3517.
+[8] Mingyu Gao, Jing Pu, Xuan Yang, Mark Horowitz, and Christos Kozyrakis. 2017.
+TETRIS: Scalable and Efficient Neural Network Acceleration with 3D Memory.
+1262
+
+===== PAGE 15 =====
+
+MICRO ’25, October 18–22, 2025, Seoul, Republic of Korea Yu Gong, Lingyi Huang, Haodong Chang, Rongjian Liang, Cheng Yang, Zhexiang Tang, Jiang Hu, and Bo Yuan
+In Proceedings of the Twenty-Second International Conference on Architectural
+Support for Programming Languages and Operating Systems . 751–764.
+[9] Mingyu Gao, Xuan Yang, Jing Pu, Mark Horowitz, and Christos Kozyrakis. 2019.
+TANGRAM: Optimized Coarse-Grained Dataflow for Scalable NN Accelerators.
+In Proceedings of the Twenty-Fourth International Conference on Architectural
+Support for Programming Languages and Operating Systems . 807–820.
+[10] Raveesh Garg, Hyoukjun Kwon, Eric Qin, Yu-Hsin Chen, Tushar Krishna, and
+Liangzhen Lai. 2024. PipeOrgan: Efficient Inter-operation Pipelining with Flexible
+Spatial Organization and Interconnects. arXiv preprint arXiv:2405.01736 (2024).
+[11] Kartik Hegde, Po-An Tsai, Sitao Huang, Vikas Chandra, Angshuman Parashar,
+and Christopher W Fletcher. 2021. Mind Mappings: Enabling Efficient Algorithm-
+Accelerator Mapping Space Search. In Proceedings of the 26th ACM International
+Conference on Architectural Support for Programming Languages and Operating
+Systems. 943–958.
+[12] Qijing Huang, Minwoo Kang, Grace Dinh, Thomas Norell, Aravind Kalaiah, James
+Demmel, John Wawrzynek, and Yakun Sophia Shao. 2021. Cosa: Scheduling by
+Constrained Optimization for Spatial Accelerators. In2021 ACM/IEEE 48th Annual
+International Symposium on Computer Architecture (ISCA) . IEEE, 554–566.
+[13] Qijing Huang, Po-An Tsai, Joel S Emer, and Angshuman Parashar. 2024. Mind the
+Gap: Attainable Data Movement and Operational Intensity Bounds for Tensor
+Algorithms. In 2024 ACM/IEEE 51st Annual International Symposium on Computer
+Architecture (ISCA). IEEE, 150–166.
+[14] Yanping Huang, Youlong Cheng, Ankur Bapna, Orhan Firat, Dehao Chen, Mia
+Chen, HyoukJoong Lee, Jiquan Ngiam, Quoc V Le, Yonghui Wu, and Zhifeng
+Chen. 2019. GPipe: Efficient Training of Giant Neural Networks using Pipeline
+Parallelism. Advances in neural information processing systems 32 (2019).
+[15] Paras Jain, Ajay Jain, Aniruddha Nrusimha, Amir Gholami, Pieter Abbeel, Joseph
+Gonzalez, Kurt Keutzer, and Ion Stoica. 2020. Checkmate: Breaking the Memory
+Wall with Optimal Tensor Rematerialization. Proceedings of Machine Learning
+and Systems 2 (2020), 497–511.
+[16] Norman P. Jouppi, Doe Hyun Yoon, Matthew Ashcraft, Mark Gottscho, Thomas B.
+Jablin, George Kurian, James Laudon, Sheng Li, Peter Ma, Xiaoyu Ma, Thomas
+Norrie, Nishant Patil, Sushma Prasad, Cliff Young, Zongwei Zhou, and David
+Patterson. 2021. Ten Lessons From Three Generations Shaped Google’s TPUv4i:
+Industrial Product. In 2021 ACM/IEEE 48th Annual International Symposium on
+Computer Architecture (ISCA). IEEE, 1–14.
+[17] Norman P. Jouppi, Cliff Young, Nishant Patil, David Patterson, Gaurav Agrawal,
+Raminder Bajwa, Sarah Bates, Suresh Bhatia, Nan Boden, Al Borchers, Rick Boyle,
+Pierre-luc Cantin, Clifford Chao, Chris Clark, Jeremy Coriell, Mike Daley, Matt
+Dau, Jeffrey Dean, Ben Gelb, Tara Vazir Ghaemmaghami, Rajendra Gottipati,
+William Gulland, Robert Hagmann, C. Richard Ho, Doug Hogberg, John Hu,
+Robert Hundt, Dan Hurt, Julian Ibarz, Aaron Jaffey, Alek Jaworski, Alexander
+Kaplan, Harshit Khaitan, Daniel Killebrew, Andy Koch, Naveen Kumar, Steve
+Lacy, James Laudon, James Law, Diemthu Le, Chris Leary, Zhuyuan Liu, Kyle
+Lucke, Alan Lundin, Gordon MacKean, Adriana Maggiore, Maire Mahony, Kieran
+Miller, Rahul Nagarajan, Ravi Narayanaswami, Ray Ni, Kathy Nix, Thomas Norrie,
+Mark Omernick, Narayana Penukonda, Andy Phelps, Jonathan Ross, Matt Ross,
+Amir Salek, Emad Samadiani, Chris Severn, Gregory Sizikov, Matthew Snelham,
+Jed Souter, Dan Steinberg, Andy Swing, Mercedes Tan, Gregory Thorson, Bo
+Tian, Horia Toma, Erick Tuttle, Vijay Vasudevan, Richard Walter, Walter Wang,
+Eric Wilcox, and Doe Hyun Yoon. 2017. In-datacenter Performance Analysis of A
+Tensor Processing Unit. InProceedings of the 44th annual international symposium
+on computer architecture. 1–12.
+[18] Sheng-Chun Kao, Xiaoyu Huang, and Tushar Krishna. 2022. DNNFuser: Genera-
+tive Pre-trained Transformer as a Generalized Mapper for Layer Fusion in DNN
+Accelerators. arXiv preprint arXiv:2201.11218 (2022).
+[19] Marisa Kirisame, Steven Lyubomirsky, Altan Haan, Jennifer Brennan, Mike He,
+Jared Roesch, Tianqi Chen, and Zachary Tatlock. 2020. Dynamic Tensor Remate-
+rialization. arXiv preprint arXiv:2006.09616 (2020).
+[20] Hyoukjun Kwon, Prasanth Chatarasi, Michael Pellauer, Angshuman Parashar,
+Vivek Sarkar, and Tushar Krishna. 2019. Understanding Reuse, Performance, and
+Hardware Cost of DNN Dataflow: A Data-Centric Approach. InProceedings of the
+52nd Annual IEEE/ACM International Symposium on Microarchitecture . 754–768.
+[21] Yao Liang and Guangyu Sun. 2023. TileFlow: A Fine-Grained Spatial Scheduler
+for DNN Training. https://github.com/pku-liang/TileFlow. Accessed: 2025-06-20.
+[22] Heng Liao, Jiajin Tu, Jing Xia, Hu Liu, Xiping Zhou, Honghui Yuan, and Yuxing
+Hu. 2021. Ascend: A Scalable and Unified Architecture for Ubiquitous Deep
+Neural Network Computing: Industry Track Paper. In 2021 IEEE International
+Symposium on High-Performance Computer Architecture (HPCA) . IEEE, 789–801.
+[23] Sangkug Lym, Armand Behroozi, Wei Wen, Ge Li, Yongkee Kwon, and Mattan
+Erez. 2019. Mini-Batch Serialization: CNN Training with Inter-layer Data Reuse.
+Proceedings of Machine Learning and Systems 1 (2019), 264–275.
+[24] Stefano Markidis, Steven Wei Der Chien, Erwin Laure, Ivy Bo Peng, and Jeffrey S
+Vetter. 2018. Nvidia Tensor Core Programmability, Performance & Precision. In
+2018 IEEE international parallel and distributed processing symposium workshops
+(IPDPSW). IEEE, 522–531.
+[25] Garth P McCormick. 1976. Computability of global solutions to factorable non-
+convex programs: Part I—Convex underestimating problems. Mathematical
+programming 10, 1 (1976), 147–175.
+[26] Linyan Mei, Koen Goetschalckx, Arne Symons, and Marian Verhelst. 2023. De-
+FiNES: Enabling Fast Exploration of the Depth-First Scheduling Space for DNN
+Accelerators Through Analytical Modeling. In2023 IEEE International Symposium
+on High-Performance Computer Architecture (HPCA) . IEEE, 570–583.
+[27] Mike O’Connor, Niladrish Chatterjee, Donghyuk Lee, John Wilson, Aditya
+Agrawal, Stephen W Keckler, and William J Dally. 2017. Fine-Grained DRAM:
+Energy-Efficient DRAM for Extreme Bandwidth Systems. In Proceedings of the
+50th Annual IEEE/ACM International Symposium on Microarchitecture . 41–54.
+[28] Brandon Reagen, José Miguel Hernández-Lobato, Robert Adolf, Michael Gelbart,
+Paul Whatmough, Gu-Yeon Wei, and David Brooks. 2017. A Case for Efficient Ac-
+celerator Design Space Exploration via Bayesian Optimization. In2017 IEEE/ACM
+International Symposium on Low Power Electronics and Design (ISLPED) . IEEE,
+1–6.
+[29] Paul Rosenfeld, Elliott Cooper-Balis, and Bruce Jacob. 2011. DRAMSim2: A cycle
+accurate memory system simulator. IEEE computer architecture letters 10, 1 (2011),
+16–19.
+[30] Daniel Sanchez and Christos Kozyrakis. 2013. ZSim: Fast and accurate microar-
+chitectural simulation of thousand-core systems. ACM SIGARCH Computer
+architecture news 41, 3 (2013), 475–486.
+[31] Yakun Sophia Shao, Jason Clemons, Rangharajan Venkatesan, Brian Zimmer,
+Matthew Fojtik, Nan Jiang, Ben Keller, Alicia Klinefelter, Nathaniel Pinckney,
+Priyanka Raina, Stephen G. Tell, Yanqing Zhang, William J. Dally, Joel Emer,
+C. Thomas Gray, Brucek Khailany, and Stephen W. Keckler. 2019. Simba: Scal-
+ing Deep-Learning Inference with Multi-Chip-Module-Based Architecture. In
+Proceedings of the 52nd Annual IEEE/ACM International Symposium on Microar-
+chitecture. 14–27.
+[32] Jianfeng Song, Rongjian Liang, Yu Gong, Bo Yuan, and Jiang Hu. 2024. DiMO-
+Sparse: Differentiable Modeling and Optimization of Sparse CNN Dataflow and
+Hardware Architecture. In 2024 Design, Automation & Test in Europe Conference
+& Exhibition (DATE). IEEE, 1–6.
+[33] Jianfeng Song, Rongjiang Liang, Bo Yuan, and Jiang Hu. 2024. DiMO-CNN:
+Deep Learning Toolkit-Accelerated Analytical Modeling and Optimization of
+CNN Hardware and Dataflow. IEEE Transactions on Computer-Aided Design of
+Integrated Circuits and Systems (2024).
+[34] Linghao Song, Xuehai Qian, Hai Li, and Yiran Chen. 2017. PipeLayer: A Pipelined
+Reram-Based Accelerator for Deep Learning. In 2017 IEEE international sympo-
+sium on high performance computer architecture (HPCA) . IEEE, 541–552.
+[35] Jasmina Vasiljevic, Ljubisa Bajic, Davor Capalija, Stanislav Sokorac, Dragoljub
+Ignjatovic, Lejla Bajic, Milos Trajkovic, Ivan Hamer, Ivan Matosevic, Aleksandar
+Cejkov, Utku Aydonat, Tony Zhou, Syed Zohaib Gilani, Armond Paiva, Joseph
+Chu, Djordje Maksimovic, Stephen Alexander Chin, Zahi Moudallal, Akhmed
+Rakhmati, Sean Nijjar, Almeet Bhullar, Boris Drazic, Charles Lee, James Sun,
+Kei-Ming Kwong, James Connolly, Miles Dooley, Hassan Farooq, Joy Yu Ting
+Chen, Matthew Walker, Keivan Dabiri, Kyle Mabee, Rakesh Shaji Lal, Namal
+Rajatheva, Renjith Retnamma, Shripad Karodi, Daniel Rosen, Emilio Munoz,
+Andrew Lewycky, Aleksandar Knezevic, Raymond Kim, Allan Rui, Alexander
+Drouillard, and David Thompson. 2021. Compute Substrate for Software 2.0.
+IEEE micro 41, 2 (2021), 50–55.
+[36] Ofri Wechsler, Michael Behar, and Bharat Daga. 2019. Spring Hill (NNP-I 1000)
+Intel’s Data Center Inference Chip. In2019 IEEE Hot Chips 31 Symposium (HCS) .
+IEEE Computer Society, 1–12.
+[37] Yannan Nellie Wu, Po-An Tsai, Angshuman Parashar, Vivienne Sze, and Joel S
+Emer. 2022. Sparseloop: An analytical Approach to Sparse Tensor Accelerator
+Modeling. In 2022 55th IEEE/ACM International Symposium on Microarchitecture
+(MICRO). IEEE, 1377–1395.
+[38] Qingcheng Xiao, Size Zheng, Bingzhe Wu, Pengcheng Xu, Xuehai Qian, and
+Yun Liang. 2021. HASCO: Towards Agile Hardware and Software Co-design for
+Tensor Computation. In 2021 ACM/IEEE 48th Annual International Symposium on
+Computer Architecture (ISCA). IEEE, 1055–1068.
+[39] Jianhao Zhang, Shihan Ma, Peihong Liu, and Jinhui Yuan. 2024. Coop: Memory is
+not a Commodity. Advances in Neural Information Processing Systems 36 (2024).
+[40] Size Zheng, Siyuan Chen, Siyuan Gao, Liancheng Jia, Guangyu Sun, Runsheng
+Wang, and Yun Liang. 2023. TileFlow: A Framework for Modeling Fusion Dataflow
+via Tree-Based Analysis. InProceedings of the 56th Annual IEEE/ACM International
+Symposium on Microarchitecture. 1271–1288.
+[41] Shixuan Zheng, Xianjue Zhang, Daoli Ou, Shibin Tang, Leibo Liu, Shaojun Wei,
+and Shouyi Yin. 2020. Efficient Scheduling of Irregular Network Structures on
+CNN Accelerators. IEEE Transactions on Computer-Aided Design of Integrated
+Circuits and Systems 39, 11 (2020), 3408–3419.
+[42] Jinming Zhuang, Zhuoping Yang, Shixin Ji, Heng Huang, Alex K Jones, Jingtong
+Hu, Yiyu Shi, and Peipei Zhou. 2024. SSR: Spatial Sequential Hybrid Architecture
+for Latency Throughput Tradeoff in Transformer Acceleration. In Proceedings
+of the 2024 ACM/SIGDA International Symposium on Field Programmable Gate
+Arrays. 55–66.
+1263

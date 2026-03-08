@@ -75,6 +75,77 @@ def _add_mccormick_product_objective(
     return x, y, z
 
 
+def _deps_by_child(
+    n_blocks: int,
+    block_dependencies: Sequence[tuple[int, int]],
+) -> dict[int, list[int]]:
+    out: dict[int, list[int]] = {}
+    for p, c in block_dependencies:
+        if 0 <= p < n_blocks and 0 <= c < n_blocks and p != c:
+            out.setdefault(c, []).append(p)
+    return out
+
+
+def _estimate_dep_traffic_from_tables(
+    sct: SchedulingTable,
+    met: MemoryTable,
+    block_volumes: Sequence[float],
+    block_dependencies: Sequence[tuple[int, int]],
+) -> tuple[float, float, float]:
+    """Estimate (Dep_C, Dep_S, Dep_D) volume from concrete ScT/MeT."""
+
+    n_states = sct.num_states
+    n_blocks = sct.num_blocks
+    deps = _deps_by_child(n_blocks=n_blocks, block_dependencies=block_dependencies)
+
+    delta = [[0.0 for _ in range(n_blocks)] for _ in range(n_states)]
+    for i in range(n_states):
+        for j in range(n_blocks):
+            cur = float(sct.get(i, j))
+            prev = float(sct.get(i - 1, j)) if i > 0 else 0.0
+            delta[i][j] = max(0.0, cur - prev)
+
+    dep_c = 0.0
+    dep_s = 0.0
+    dep_d = 0.0
+
+    for i in range(n_states):
+        prev_i = max(0, i - 1)
+        for child in range(n_blocks):
+            need_sb = float(delta[i][child])
+            if need_sb <= 0:
+                continue
+
+            parents = deps.get(child, [])
+            if not parents:
+                dep_d += need_sb * float(block_volumes[child])
+                continue
+
+            per_parent_need = need_sb / float(max(1, len(parents)))
+            for parent in parents:
+                vol = float(block_volumes[parent])
+
+                parent_new = float(delta[i][parent])
+                from_c = min(per_parent_need, parent_new)
+                remain = per_parent_need - from_c
+
+                sram_live = max(0.0, float(sct.get(prev_i, parent)) - float(met.sram[prev_i, parent]))
+                from_s = min(remain, sram_live)
+                remain -= from_s
+
+                dram_live = max(0.0, float(sct.get(prev_i, parent)) - float(met.dram[prev_i, parent]))
+                from_d = min(remain, dram_live)
+                remain -= from_d
+                if remain > 0.0:
+                    from_d += remain
+
+                dep_c += from_c * vol
+                dep_s += from_s * vol
+                dep_d += from_d * vol
+
+    return dep_c, dep_s, dep_d
+
+
 def _optimize_memory_with_ortools(
     sct: SchedulingTable,
     block_volumes: Sequence[float],
@@ -146,18 +217,77 @@ def _optimize_memory_with_ortools(
             <= float(dram_capacity)
         )
 
-    # Eq.23-inspired objective using Eq.19/Eq.21 style terms on DRAM-sourced traffic.
-    # Here we approximate traffic by DRAM-live volume tracked by (ScT - MeT_D).
-    dram_live_volume = solver.Sum(
-        (float(sct.get(i, j)) - md[i][j]) * float(block_volumes[j])
-        for i in range(n_states)
-        for j in range(n_blocks)
-    )
+    # Eq.23 objective with explicit Eq.19/Eq.21 decomposition.
+    deps = _deps_by_child(n_blocks=n_blocks, block_dependencies=block_dependencies)
+
+    delta = [[0.0 for _ in range(n_blocks)] for _ in range(n_states)]
+    for i in range(n_states):
+        for j in range(n_blocks):
+            cur = float(sct.get(i, j))
+            prev = float(sct.get(i - 1, j)) if i > 0 else 0.0
+            delta[i][j] = max(0.0, cur - prev)
+
+    h_c = 1.0
+    h_s = 1.0
+    h_d = max(0.0, float(dram_noc_hops))
+
+    dep_c_const = 0.0
+    dep_d_const = 0.0
+    noc_terms = []
+    dep_d_terms = []
+
+    for i in range(n_states):
+        prev_i = max(0, i - 1)
+        for child in range(n_blocks):
+            need_sb = float(delta[i][child])
+            if need_sb <= 0.0:
+                continue
+
+            parents = deps.get(child, [])
+            if not parents:
+                dep_d_const += need_sb * float(block_volumes[child])
+                continue
+
+            per_parent_need = need_sb / float(max(1, len(parents)))
+            for parent in parents:
+                vol = float(block_volumes[parent])
+                parent_new = float(delta[i][parent])
+                from_c_sb = min(per_parent_need, parent_new)
+                dep_c_const += from_c_sb * vol
+
+                remain_sb = max(0.0, per_parent_need - from_c_sb)
+                if remain_sb <= 1e-12:
+                    continue
+
+                dep_s = solver.NumVar(0.0, remain_sb, f"dep_s_{i}_{parent}_{child}")
+                dep_d = solver.NumVar(0.0, remain_sb, f"dep_d_{i}_{parent}_{child}")
+
+                sram_live_expr = float(sct.get(prev_i, parent)) - ms[prev_i][parent]
+                dram_live_expr = float(sct.get(prev_i, parent)) - md[prev_i][parent]
+                solver.Add(dep_s <= sram_live_expr)
+                solver.Add(dep_d <= dram_live_expr)
+                solver.Add(dep_s + dep_d == remain_sb)
+
+                noc_terms.append(dep_s * vol * h_s)
+                noc_terms.append(dep_d * vol * h_d)
+                dep_d_terms.append(dep_d * vol)
+
+    noc_traffic_expr = dep_c_const * h_c + dep_d_const * h_d
+    if noc_terms:
+        noc_traffic_expr += solver.Sum(noc_terms)
+
+    dep_d_volume_expr = dep_d_const
+    if dep_d_terms:
+        dep_d_volume_expr += solver.Sum(dep_d_terms)
+
     dram_bw = float(dram_bandwidth) if dram_bandwidth is not None else float(noc_bandwidth)
-    hop = max(0.0, float(dram_noc_hops))
-    traffic_latency_expr = (dram_live_volume * hop) / max(1e-9, float(noc_bandwidth)) + dram_live_volume / max(1e-9, dram_bw)
-    traffic_energy_expr = dram_live_volume * (
-        max(0.0, float(noc_energy_per_unit)) * hop + max(0.0, float(dram_energy_per_unit))
+    traffic_latency_expr = (
+        noc_traffic_expr / max(1e-9, float(noc_bandwidth))
+        + dep_d_volume_expr / max(1e-9, dram_bw)
+    )
+    traffic_energy_expr = (
+        noc_traffic_expr * max(0.0, float(noc_energy_per_unit))
+        + dep_d_volume_expr * max(0.0, float(dram_energy_per_unit))
     )
 
     if use_edp_objective:
@@ -167,8 +297,10 @@ def _optimize_memory_with_ortools(
         scaled_energy_expr = wene * traffic_energy_expr
 
         vol_ub = sum(float(sct.get(i, j)) * float(block_volumes[j]) for i in range(n_states) for j in range(n_blocks))
-        lat_ub = (vol_ub * hop) / max(1e-9, float(noc_bandwidth)) + vol_ub / max(1e-9, dram_bw)
-        ene_ub = vol_ub * (max(0.0, float(noc_energy_per_unit)) * hop + max(0.0, float(dram_energy_per_unit)))
+        hop_ub = max(h_c, h_s, h_d)
+        noc_ub = max(0.0, vol_ub * hop_ub)
+        lat_ub = noc_ub / max(1e-9, float(noc_bandwidth)) + vol_ub / max(1e-9, dram_bw)
+        ene_ub = noc_ub * max(0.0, float(noc_energy_per_unit)) + vol_ub * max(0.0, float(dram_energy_per_unit))
         _, _, z = _add_mccormick_product_objective(
             solver=solver,
             x_expr=scaled_latency_expr,
@@ -197,15 +329,17 @@ def _optimize_memory_with_ortools(
             met.set_sram(i, j, float(int(round(ms[i][j].solution_value()))))
             met.set_dram(i, j, float(int(round(md[i][j].solution_value()))))
 
-    # Report objective in EDP form when enabled.
-    solved_volume = sum(
-        (sct.get(i, j) - met.dram[i, j]) * float(block_volumes[j])
-        for i in range(n_states)
-        for j in range(n_blocks)
+    dep_c, dep_s, dep_d = _estimate_dep_traffic_from_tables(
+        sct=sct,
+        met=met,
+        block_volumes=block_volumes,
+        block_dependencies=block_dependencies,
     )
-    traffic_latency = (solved_volume * hop) / max(1e-9, float(noc_bandwidth)) + solved_volume / max(1e-9, dram_bw)
-    traffic_energy = solved_volume * (
-        max(0.0, float(noc_energy_per_unit)) * hop + max(0.0, float(dram_energy_per_unit))
+    noc_traffic = dep_c * h_c + dep_s * h_s + dep_d * h_d
+    traffic_latency = noc_traffic / max(1e-9, float(noc_bandwidth)) + dep_d / max(1e-9, dram_bw)
+    traffic_energy = (
+        noc_traffic * max(0.0, float(noc_energy_per_unit))
+        + dep_d * max(0.0, float(dram_energy_per_unit))
     )
 
     if use_edp_objective:
@@ -260,4 +394,3 @@ def optimize_memory_table(
             raise
         met = build_memory_table(sct, sram_keep_ratio=heuristic_sram_keep_ratio)
         return MemoryOptimizationResult(table=met, objective=0.0, solver_name="heuristic-fallback")
-

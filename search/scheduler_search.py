@@ -1,7 +1,9 @@
 ﻿from __future__ import annotations
 
+import os
+import time
 from dataclasses import dataclass, field, replace
-from math import floor
+from math import ceil, floor
 from typing import Sequence
 
 from cost_model.energy_model import communication_energy, edp
@@ -47,10 +49,15 @@ class SearchConfig:
     strict_paper_mode: bool = True
     top_k1: int = 4
     top_k2: int = 2
+    top_k1_ratio: float = 0.5
+    top_k2_ratio: float = 0.2
+    use_all_sub_batch_factors: bool = False
     use_edp_objective: bool = True
     dependency_gap: int = 0
     allow_solver_fallback: bool = False
     latency_combine_mode: str = "max"
+    verbose_progress: bool = False
+    progress_prefix: str = ""
 
     # Hierarchical optimization (Section 6 style).
     enable_hierarchical_pipeline: bool = False
@@ -167,6 +174,46 @@ def _state_caps(total_sub_batches: int, num_states: int, max_state_share: float)
     return [cap for _ in range(num_states)]
 
 
+
+
+def _divisors(n: int) -> list[int]:
+    out: set[int] = set()
+    for d in range(1, int(n**0.5) + 1):
+        if n % d == 0:
+            out.add(d)
+            out.add(n // d)
+    return sorted(out)
+
+
+def _effective_sub_batch_candidates(config: SearchConfig) -> list[int]:
+    cfg = [int(x) for x in config.candidate_sub_batches if int(x) > 0]
+    if config.strict_paper_mode and config.use_all_sub_batch_factors:
+        cfg = sorted(set(cfg).union(_divisors(int(config.batch_size))))
+    return cfg
+
+
+def _topk_by_ratio_or_count(total: int, ratio: float, fallback_count: int) -> int:
+    if total <= 0:
+        return 0
+    if ratio > 0.0:
+        return max(1, min(total, int(ceil(total * ratio))))
+    return max(1, min(total, int(fallback_count)))
+def _progress_enabled(config: SearchConfig) -> bool:
+    if bool(config.verbose_progress):
+        return True
+    env = os.environ.get("CRANE_LIVE_PROGRESS", "").strip().lower()
+    return env in {"1", "true", "yes", "on"}
+
+
+def _progress(config: SearchConfig, message: str) -> None:
+    if not _progress_enabled(config):
+        return
+    ts = time.strftime("%H:%M:%S")
+    prefix = (config.progress_prefix or "").strip()
+    if prefix:
+        print(f"[{ts}] [{prefix}] {message}", flush=True)
+    else:
+        print(f"[{ts}] {message}", flush=True)
 
 def _caps_cover_pipeline_windows(
     caps: Sequence[int],
@@ -483,12 +530,22 @@ def _flat_search_prepared(
 
     stage1_candidates: list[_Candidate] = []
 
+    sub_batch_candidates = _effective_sub_batch_candidates(config)
+    dep_gap = int(config.dependency_gap)
+
+    _progress(
+        config,
+        f"flat-search start level={hierarchy_level} path={trace_path or 'root'} blocks={len(work_blocks)} states={n_states} pes={config.num_pes} sub_batch_candidates={sub_batch_candidates}",
+    )
+
     # Stage-1: enumerate BS_sub and optimize ScT (Eq.1-6, Eq.22).
-    for sub_batch in config.candidate_sub_batches:
+    for sb_idx, sub_batch in enumerate(sub_batch_candidates, start=1):
         if sub_batch <= 0 or config.batch_size % sub_batch != 0:
+            _progress(config, f"[Stage-1] skip invalid sub_batch={sub_batch} ({sb_idx}/{len(sub_batch_candidates)})")
             continue
 
         total_sub_batches = config.batch_size // sub_batch
+        _progress(config, f"[Stage-1] solving ScT for sub_batch={sub_batch} ({sb_idx}/{len(sub_batch_candidates)}), total_sub_batches={total_sub_batches}")
 
         min_active = max(1, min(int(config.min_active_states), n_states))
 
@@ -511,12 +568,13 @@ def _flat_search_prepared(
                 min_batch_if_active=config.min_batch_if_active,
                 max_batches_per_state=caps,
                 use_edp_objective=config.use_edp_objective,
-                dependency_gap=config.dependency_gap,
+                dependency_gap=dep_gap,
                 compute_power_per_tile=config.compute_power_per_tile,
                 energy_per_op=config.compute_energy_per_op,
                 allow_fallback=config.allow_solver_fallback,
             )
-        except Exception:
+        except Exception as exc:
+            _progress(config, f"[Stage-1] ScT infeasible/failed for sub_batch={sub_batch}: {exc}")
             continue
 
         compute_latency = sum(
@@ -539,17 +597,26 @@ def _flat_search_prepared(
             )
         )
 
+    _progress(config, f"[Stage-1] feasible ScT candidates={len(stage1_candidates)}")
     if not stage1_candidates:
         raise RuntimeError("No feasible ScT candidate found. Check batch and constraints.")
 
     stage1_candidates.sort(key=lambda x: x.sct_opt.objective)
     if config.strict_paper_mode:
-        k1 = max(1, min(int(config.top_k1), len(stage1_candidates)))
-        stage1_candidates = stage1_candidates[:k1]
+        k1 = _topk_by_ratio_or_count(
+            total=len(stage1_candidates),
+            ratio=float(config.top_k1_ratio),
+            fallback_count=int(config.top_k1),
+        )
+    else:
+        k1 = max(1, min(len(stage1_candidates), int(config.top_k1)))
+    stage1_candidates = stage1_candidates[:k1]
+    _progress(config, f"[Stage-1] keep top-K1={k1} candidates")
 
     # Stage-2: optimize MeT (Eq.7-12, Eq.23) on top-K1.
     stage2_candidates: list[_Candidate] = []
-    for cand in stage1_candidates:
+    for cidx, cand in enumerate(stage1_candidates, start=1):
+        _progress(config, f"[Stage-2] solving MeT for candidate {cidx}/{len(stage1_candidates)} sub_batch={cand.sub_batch}")
         try:
             met_opt = optimize_memory_table(
                 sct=cand.sct_opt.sct,
@@ -568,7 +635,8 @@ def _flat_search_prepared(
                 use_edp_objective=config.use_edp_objective,
                 allow_fallback=config.allow_solver_fallback,
             )
-        except Exception:
+        except Exception as exc:
+            _progress(config, f"[Stage-2] MeT infeasible/failed for sub_batch={cand.sub_batch}: {exc}")
             continue
 
         memory_latency, memory_energy = _estimate_memory_cost(
@@ -591,13 +659,21 @@ def _flat_search_prepared(
         cand.memory_edp = edp(memory_latency, memory_energy)
         stage2_candidates.append(cand)
 
+    _progress(config, f"[Stage-2] feasible MeT candidates={len(stage2_candidates)}")
     if not stage2_candidates:
         raise RuntimeError("No feasible MeT candidate found after ScT optimization.")
 
     stage2_candidates.sort(key=lambda x: x.met_opt.objective if x.met_opt is not None else float("inf"))
     if config.strict_paper_mode:
-        k2 = max(1, min(int(config.top_k2), len(stage2_candidates)))
-        stage2_candidates = stage2_candidates[:k2]
+        k2 = _topk_by_ratio_or_count(
+            total=len(stage2_candidates),
+            ratio=float(config.top_k2_ratio),
+            fallback_count=int(config.top_k2),
+        )
+    else:
+        k2 = max(1, min(len(stage2_candidates), int(config.top_k2)))
+    stage2_candidates = stage2_candidates[:k2]
+    _progress(config, f"[Stage-2] keep top-K2={k2} candidates")
 
     # Final choose by total EDP.
     best_cand = min(
@@ -607,6 +683,10 @@ def _flat_search_prepared(
             x.compute_energy + x.memory_energy,
         ),
     )
+
+    best_total_latency = _combine_total_latency(best_cand.compute_latency, best_cand.memory_latency, config.latency_combine_mode)
+    best_total_energy = best_cand.compute_energy + best_cand.memory_energy
+    _progress(config, f"[Final] best sub_batch={best_cand.sub_batch} total_latency={best_total_latency:.6e} total_energy={best_total_energy:.6e} total_edp={edp(best_total_latency, best_total_energy):.6e}")
 
     return _build_result_from_candidate(
         candidate=best_cand,
@@ -682,6 +762,7 @@ def _hierarchical_search(
 
             share = max(1e-6, current_flops[bi] / total_now_flops)
             child_cfg = _child_cfg(config, share=share, child_count=len(child_blocks))
+            _progress(config, f"[Hier] level={len(lineage)} iter={iter_idx + 1} -> child block={blk.name} child_blocks={len(child_blocks)}")
             child_result = _hierarchical_search(
                 blocks=child_blocks,
                 config=child_cfg,
@@ -807,3 +888,26 @@ def search_schedule(
         hierarchy_notes=[],
         trace_path="root",
     )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
