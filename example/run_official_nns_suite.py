@@ -3,7 +3,12 @@ from datetime import datetime
 from pathlib import Path
 import sys
 
-ROOT = Path(__file__).resolve().parents[1]
+_BOOTSTRAP_ROOT = Path(__file__).absolute().parents[1]
+if str(_BOOTSTRAP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BOOTSTRAP_ROOT))
+
+
+ROOT = project_root_from(__file__, 1)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -340,8 +345,8 @@ def main():
                 "latency": f"{result.total_latency:.6f}",
                 "energy": f"{result.total_energy:.6f}",
                 "edp": f"{result.total_edp:.6f}",
-                "detail_file": str(detail),
-                "html_file": str(detail_html),
+                "detail_file": repo_rel(detail, ROOT),
+                "html_file": repo_rel(detail_html, ROOT),
             }
         )
 
@@ -360,7 +365,7 @@ def main():
     with txt_file.open("w", encoding="utf-8", newline="\n") as f:
         f.write(f"official_nns_suite run: {ts}\n")
         f.write(f"count={len(rows)}\n")
-        f.write(f"details_dir={detail_dir}\n\n")
+        f.write(f"details_dir={repo_rel(detail_dir, ROOT)}\n\n")
         for r in rows:
             f.write(f"[{r['network']}]\n")
             f.write(f"  source_ref: {r['source_ref']}\n")
@@ -376,13 +381,18 @@ def main():
             f.write(f"  detail_file: {r['detail_file']}\n")
             f.write(f"  html_file: {r['html_file']}\n\n")
 
-    print(f"txt={txt_file}")
-    print(f"csv={csv_file}")
-    print(f"details={detail_dir}")
+    print(f"txt={repo_rel(txt_file, ROOT)}")
+    print(f"csv={repo_rel(csv_file, ROOT)}")
+    print(f"details={repo_rel(detail_dir, ROOT)}")
 
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
 
 
 

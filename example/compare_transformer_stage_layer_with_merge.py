@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = project_root_from(__file__, 1)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -400,17 +400,20 @@ def main() -> None:
         f.write(f"  better_mode={better}\n")
         f.write(f"  edp_ratio_stage_over_layer={ratio:.6f}\n")
 
-    print(f"out_dir={out_dir}")
-    print(f"summary_txt={summary_txt}")
-    print(f"summary_csv={summary_csv}")
-    print(f"stage_detail={stage_detail}")
-    print(f"layer_detail={layer_detail}")
-    print(f"stage_html={stage_html}")
-    print(f"layer_html={layer_html}")
+    print(f"out_dir={repo_rel(out_dir, ROOT)}")
+    print(f"summary_txt={repo_rel(summary_txt, ROOT)}")
+    print(f"summary_csv={repo_rel(summary_csv, ROOT)}")
+    print(f"stage_detail={repo_rel(stage_detail, ROOT)}")
+    print(f"layer_detail={repo_rel(layer_detail, ROOT)}")
+    print(f"stage_html={repo_rel(stage_html, ROOT)}")
+    print(f"layer_html={repo_rel(layer_html, ROOT)}")
 
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 

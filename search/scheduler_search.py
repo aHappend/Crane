@@ -117,6 +117,79 @@ def _empty_state_block_override(
     return [[None for _ in range(num_blocks)] for _ in range(num_states)]
 
 
+
+def _empty_state_int_bounds(
+    num_states: int,
+    num_blocks: int,
+) -> list[list[int | None]]:
+    return [[None for _ in range(num_blocks)] for _ in range(num_states)]
+
+
+
+def _resample_monotone_cumulative(
+    src: Sequence[float],
+    out_len: int,
+) -> list[int]:
+    if out_len <= 0:
+        return []
+    if not src:
+        return [0 for _ in range(out_len)]
+    if out_len == 1:
+        return [max(0, int(round(float(src[-1]))))]
+
+    src_vals = [max(0.0, float(v)) for v in src]
+    total = max(0, int(round(src_vals[-1])))
+    out: list[int] = []
+    src_last = max(1, len(src_vals) - 1)
+    out_last = max(1, out_len - 1)
+    for i in range(out_len):
+        pos = float(i) * float(src_last) / float(out_last)
+        lo = int(floor(pos))
+        hi = min(src_last, lo + 1)
+        alpha = max(0.0, min(1.0, pos - float(lo)))
+        val = (1.0 - alpha) * src_vals[lo] + alpha * src_vals[hi]
+        out.append(max(0, min(total, int(round(val)))))
+
+    for i in range(1, len(out)):
+        if out[i] < out[i - 1]:
+            out[i] = out[i - 1]
+    out[-1] = total
+    return out
+
+
+
+def _derive_child_completion_bounds_from_parent(
+    parent_result: SearchResult,
+    parent_block_index: int,
+    child_num_states: int,
+    child_num_blocks: int,
+) -> tuple[list[list[int | None]], list[list[int | None]]]:
+    if child_num_states <= 0 or child_num_blocks <= 0:
+        raise ValueError('child_num_states and child_num_blocks must be positive')
+
+    parent_cum = [
+        max(0, int(round(parent_result.sct.get(i, parent_block_index))))
+        for i in range(parent_result.sct.num_states)
+    ]
+    target = _resample_monotone_cumulative(parent_cum, child_num_states)
+    total = max(0, target[-1] if target else 0)
+    slack = max(1, int(ceil(total * 0.05))) if total > 0 else 0
+    lb = _empty_state_int_bounds(child_num_states, child_num_blocks)
+    ub = _empty_state_int_bounds(child_num_states, child_num_blocks)
+    last_child = child_num_blocks - 1
+
+    for i, val in enumerate(target):
+        lo = max(0, int(val) - slack)
+        hi = min(total, int(val) + slack)
+        lb[i][last_child] = lo
+        ub[i][last_child] = hi
+
+    lb[0][last_child] = 0
+    ub[0][last_child] = 0
+    lb[-1][last_child] = total
+    ub[-1][last_child] = total
+    return lb, ub
+
 @dataclass
 class _Candidate:
     sub_batch: int
@@ -624,6 +697,8 @@ def _derive_recursive_intra_block_traces(
                 hierarchy_level=len(lineage) + 1,
                 hierarchy_notes=[],
                 trace_path=child_path,
+                state_count_lower_bounds=child_lb,
+                state_count_upper_bounds=child_ub,
             )
         except Exception as exc:
             notes.append(
@@ -789,6 +864,10 @@ def _recursive_joint_optimize_prepared(
     hierarchy_level: int,
     hierarchy_notes: list[str] | None,
     trace_path: str | None,
+    final_counts_per_block: Sequence[int] | None = None,
+    initial_counts_per_block: Sequence[int] | None = None,
+    state_count_lower_bounds: Sequence[Sequence[int | None]] | None = None,
+    state_count_upper_bounds: Sequence[Sequence[int | None]] | None = None,
 ) -> SearchResult:
     flat_cfg = replace(config, derive_recursive_traces=False)
     notes = list(hierarchy_notes or [])
@@ -801,6 +880,10 @@ def _recursive_joint_optimize_prepared(
         hierarchy_level=hierarchy_level,
         hierarchy_notes=notes,
         trace_path=trace_path,
+        final_counts_per_block=final_counts_per_block,
+        initial_counts_per_block=initial_counts_per_block,
+        state_count_lower_bounds=state_count_lower_bounds,
+        state_count_upper_bounds=state_count_upper_bounds,
     )
     _stamp_traces(
         current_result.hierarchy_traces,
@@ -850,16 +933,41 @@ def _recursive_joint_optimize_prepared(
                 enable_chain_block_merge=False,
             )
             child_deps = _derive_or_default_dependencies(children)
-            child_path = f"{trace_path or 'root'}/joint_{joint_iter + 1}_{bi:02d}_{block.name}"
-            child_res = _recursive_joint_optimize_prepared(
-                work_blocks=children,
-                block_deps=child_deps,
-                config=child_cfg,
-                depth_remaining=depth_remaining - 1,
-                hierarchy_level=hierarchy_level + 1,
-                hierarchy_notes=[],
-                trace_path=child_path,
+            child_num_states = int(child_cfg.num_states) if child_cfg.num_states is not None else (2 * len(children) - 1)
+            child_lb, child_ub = _derive_child_completion_bounds_from_parent(
+                current_result,
+                parent_block_index=bi,
+                child_num_states=child_num_states,
+                child_num_blocks=len(children),
             )
+            child_path = f"{trace_path or 'root'}/joint_{joint_iter + 1}_{bi:02d}_{block.name}"
+            try:
+                child_res = _recursive_joint_optimize_prepared(
+                    work_blocks=children,
+                    block_deps=child_deps,
+                    config=child_cfg,
+                    depth_remaining=depth_remaining - 1,
+                    hierarchy_level=hierarchy_level + 1,
+                    hierarchy_notes=[],
+                    trace_path=child_path,
+                    state_count_lower_bounds=child_lb,
+                    state_count_upper_bounds=child_ub,
+                )
+                child_boundary_mode = "last_child_track"
+            except Exception as exc:
+                notes.append(
+                    f"joint_iter={joint_iter} parent={block.name} boundary_retry=free reason={exc}"
+                )
+                child_res = _recursive_joint_optimize_prepared(
+                    work_blocks=children,
+                    block_deps=child_deps,
+                    config=child_cfg,
+                    depth_remaining=depth_remaining - 1,
+                    hierarchy_level=hierarchy_level + 1,
+                    hierarchy_notes=[],
+                    trace_path=child_path,
+                )
+                child_boundary_mode = "free_fallback"
             total_sub_batches = max(1, int(config.batch_size // max(1, current_result.best_sub_batch)))
             unit_lat_override[bi] = float(child_res.total_latency) / float(total_sub_batches)
             unit_ene_override[bi] = float(child_res.total_energy) / float(total_sub_batches)
@@ -873,7 +981,7 @@ def _recursive_joint_optimize_prepared(
                 state_ene_override[si][bi] = parent_state_ene[si]
             notes.append(
                 f"joint_iter={joint_iter} parent={block.name} children={len(children)} "
-                f"share={child_shares[bi]:.4f} unit_lat={unit_lat_override[bi]:.6e} unit_ene={unit_ene_override[bi]:.6e}"
+                f"share={child_shares[bi]:.4f} unit_lat={unit_lat_override[bi]:.6e} unit_ene={unit_ene_override[bi]:.6e} boundary={child_boundary_mode}"
             )
             _stamp_traces(
                 child_res.hierarchy_traces,
@@ -895,6 +1003,10 @@ def _recursive_joint_optimize_prepared(
             hierarchy_level=hierarchy_level,
             hierarchy_notes=notes,
             trace_path=trace_path,
+            final_counts_per_block=final_counts_per_block,
+            initial_counts_per_block=initial_counts_per_block,
+            state_count_lower_bounds=state_count_lower_bounds,
+            state_count_upper_bounds=state_count_upper_bounds,
             block_unit_latency_override=unit_lat_override,
             block_unit_energy_override=unit_ene_override,
             state_block_latency_override=state_lat_override,
@@ -1798,6 +1910,14 @@ def search_schedule(
         hierarchy_notes=[],
         trace_path="root",
     )
+
+
+
+
+
+
+
+
 
 
 

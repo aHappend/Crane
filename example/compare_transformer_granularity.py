@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = project_root_from(__file__, 1)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -356,12 +356,15 @@ def main() -> None:
         f.write("stage_detail=stage_level_detail.txt\n")
         f.write("layer_detail=layer_level_detail.txt\n")
 
-    print(f"out_dir={out_dir}")
-    print(f"summary_txt={summary_txt}")
-    print(f"summary_csv={summary_csv}")
-    print(f"stage_detail={out_dir / 'stage_level_detail.txt'}")
-    print(f"layer_detail={out_dir / 'layer_level_detail.txt'}")
+    print(f"out_dir={repo_rel(out_dir, ROOT)}")
+    print(f"summary_txt={repo_rel(summary_txt, ROOT)}")
+    print(f"summary_csv={repo_rel(summary_csv, ROOT)}")
+    print(f"stage_detail={repo_rel(out_dir / 'stage_level_detail.txt', ROOT)}")
+    print(f"layer_detail={repo_rel(out_dir / 'layer_level_detail.txt', ROOT)}")
 
 
 if __name__ == "__main__":
     main()
+
+
+

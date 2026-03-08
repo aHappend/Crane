@@ -7,7 +7,13 @@ from pathlib import Path
 import re
 import sys
 
-ROOT = Path(__file__).resolve().parents[1]
+_BOOTSTRAP_ROOT = Path(__file__).absolute().parents[1]
+if str(_BOOTSTRAP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BOOTSTRAP_ROOT))
+
+from project_paths import project_root_from, repo_rel
+
+ROOT = project_root_from(__file__, 1)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -283,21 +289,25 @@ def main() -> None:
         f.write(f"best_latency={best.result.total_latency:.6f}\n")
         f.write(f"best_energy={best.result.total_energy:.6f}\n")
         f.write(f"best_edp={best.result.total_edp:.6f}\n")
-        f.write(f"best_detail={best_detail}\n")
-        f.write(f"best_html={best_html}\n")
+        f.write(f"best_detail={repo_rel(best_detail, ROOT)}\n")
+        f.write(f"best_html={repo_rel(best_html, ROOT)}\n")
 
     write_detail(best_detail, blocks, best)
     write_html(best_html, best)
 
-    print(f"out_dir={out_dir}")
-    print(f"summary={txt_path}")
-    print(f"candidates={csv_path}")
-    print(f"best_detail={best_detail}")
-    print(f"best_html={best_html}")
+    print(f"out_dir={repo_rel(out_dir, ROOT)}")
+    print(f"summary={repo_rel(txt_path, ROOT)}")
+    print(f"candidates={repo_rel(csv_path, ROOT)}")
+    print(f"best_detail={repo_rel(best_detail, ROOT)}")
+    print(f"best_html={repo_rel(best_html, ROOT)}")
 
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 

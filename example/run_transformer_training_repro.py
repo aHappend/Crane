@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = project_root_from(__file__, 1)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -236,11 +236,14 @@ def main() -> None:
         for note in res.hierarchy_notes:
             f.write(f"note={note}\n")
 
-    print(f"out_dir={out_dir}")
-    print(f"summary={summary_txt}")
-    print(f"phase_csv={summary_csv}")
-    print(f"fw_html={fw_html}")
+    print(f"out_dir={repo_rel(out_dir, ROOT)}")
+    print(f"summary={repo_rel(summary_txt, ROOT)}")
+    print(f"phase_csv={repo_rel(summary_csv, ROOT)}")
+    print(f"fw_html={repo_rel(fw_html, ROOT)}")
 
 
 if __name__ == "__main__":
     main()
+
+
+

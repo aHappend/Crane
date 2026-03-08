@@ -10,7 +10,12 @@ from datetime import datetime
 from pathlib import Path
 import sys
 
-ROOT = Path(__file__).resolve().parents[1]
+_BOOTSTRAP_ROOT = Path(__file__).absolute().parents[1]
+if str(_BOOTSTRAP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BOOTSTRAP_ROOT))
+
+
+ROOT = project_root_from(__file__, 1)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -404,7 +409,7 @@ def _run_one_with_timeout(
 
     cmd = [
         sys.executable,
-        str(Path(__file__).resolve()),
+        str(Path(__file__).absolute()),
         "--single-run",
         "--single-network",
         str(network),
@@ -887,11 +892,16 @@ def main() -> None:
         f.write(f"  stage_timeout_count={stage_timeout}\n")
         f.write(f"  layer_timeout_count={layer_timeout}\n")
 
-    print(f"out_dir={out_dir}")
-    print(f"summary_txt={txt_path}")
-    print(f"summary_csv={csv_path}")
-    print(f"details_dir={details_dir}")
+    print(f"out_dir={repo_rel(out_dir, ROOT)}")
+    print(f"summary_txt={repo_rel(txt_path, ROOT)}")
+    print(f"summary_csv={repo_rel(csv_path, ROOT)}")
+    print(f"details_dir={repo_rel(details_dir, ROOT)}")
 
 
 if __name__ == "__main__":
     main()
+
+
+
+
+

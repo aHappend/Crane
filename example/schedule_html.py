@@ -245,3 +245,4 @@ details.trace-block > summary {{ cursor:pointer; font-weight:600; margin-bottom:
 """
 
     out.write_text(html, encoding='utf-8')
+
