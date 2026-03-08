@@ -997,6 +997,41 @@ def _with_memory_override(
         total_energy=float(total_energy),
         total_edp=float(edp(total_latency, total_energy)),
     )
+
+def _bw1_initial_counts_from_forward_end_md(end_md: Sequence[int]) -> list[int]:
+    """Eq.14-style prefix counts for backward-only preprocessing."""
+
+    rev = [int(v) for v in reversed(end_md)]
+    init = [0 for _ in rev]
+    for j in range(1, len(rev)):
+        init[j] = max(0, rev[j - 1] - rev[j])
+    return init
+
+
+def _training_end_md_profiles(total_sub_batches: int, n_blocks: int) -> list[tuple[str, list[int]]]:
+    base = sorted({max(0, total_sub_batches - keep) for keep in _training_retention_candidates(total_sub_batches)}, reverse=True)
+    profiles: list[tuple[str, list[int]]] = []
+    seen: set[tuple[int, ...]] = set()
+
+    def add_profile(tag: str, vals: list[int]) -> None:
+        key = tuple(max(0, min(total_sub_batches, int(v))) for v in vals)
+        if key in seen:
+            return
+        seen.add(key)
+        profiles.append((tag, list(key)))
+
+    half = max(1, n_blocks // 2)
+    q3 = max(1, (3 * n_blocks) // 4)
+    for md in base:
+        add_profile(f"uniform_md{md}", [md for _ in range(n_blocks)])
+        if md > 0:
+            add_profile(f"halfsplit_md{md}_{max(0, md - 1)}", [md for _ in range(half)] + [max(0, md - 1) for _ in range(n_blocks - half)])
+        if md > 1:
+            add_profile(f"tailkeep_md{md}_{max(0, md - 2)}", [md for _ in range(q3)] + [max(0, md - 2) for _ in range(n_blocks - q3)])
+
+    return profiles
+
+
 def _search_training_with_recomputation(
     blocks: Sequence[Block],
     config: SearchConfig,
@@ -1093,15 +1128,14 @@ def _search_training_with_recomputation(
             _progress(config, f"[Training] FW failed for sub_batch={sub_batch}: {exc}")
             continue
 
-        retention_candidates = _training_retention_candidates(total_sub)
+        end_md_profiles = _training_end_md_profiles(total_sub, n)
         seen_end_md: set[tuple[int, ...]] = set()
         candidate_logs: list[str] = []
 
-        for retain_idx, retain_count in enumerate(retention_candidates, start=1):
-            desired_md_ub = max(0, total_sub - int(retain_count))
+        for retain_idx, (retain_tag, desired_md_ub) in enumerate(end_md_profiles, start=1):
             _progress(
                 config,
-                f"[Training] sub_batch={sub_batch}: retention {retain_idx}/{len(retention_candidates)} keep>={retain_count}",
+                f"[Training] sub_batch={sub_batch}: profile {retain_idx}/{len(end_md_profiles)} {retain_tag} target_end_md={desired_md_ub}",
             )
 
             try:
@@ -1122,12 +1156,12 @@ def _search_training_with_recomputation(
                     use_edp_objective=phase_cfg.use_edp_objective,
                     allow_fallback=False,
                     enforce_end_dram_dependency=True,
-                    end_dram_upper_bounds=[desired_md_ub for _ in range(n)],
+                    end_dram_upper_bounds=desired_md_ub,
                     force_final_sram_empty=True,
                 )
             except Exception as exc:
                 candidate_logs.append(
-                    f"candidate sub_batch={sub_batch} retain>={retain_count} status=fw_met_failed reason={exc}"
+                    f"candidate sub_batch={sub_batch} profile={retain_tag} status=fw_met_failed reason={exc}"
                 )
                 continue
 
@@ -1161,9 +1195,10 @@ def _search_training_with_recomputation(
             stored_counts = [max(0, total_sub - v) for v in end_md]
             discarded_counts = [max(0, v) for v in end_md]
             bw1_final = [stored_counts[n - 1 - i] for i in range(n)]
+            bw1_init = _bw1_initial_counts_from_forward_end_md(end_md)
             bw2_final = list(discarded_counts) + [discarded_counts[n - 1 - i] for i in range(n)]
 
-            _progress(config, f"[Training] sub_batch={sub_batch}: solve BW1 with end_md={list(end_md)}")
+            _progress(config, f"[Training] sub_batch={sub_batch}: solve BW1 profile={retain_tag} end_md={list(end_md)}")
             try:
                 bw1_res = _flat_search_prepared(
                     work_blocks=bw_blocks,
@@ -1173,17 +1208,17 @@ def _search_training_with_recomputation(
                     block_outputs_override=bw_outputs,
                     hierarchy_level=0,
                     hierarchy_notes=[],
-                    trace_path=f"train/sb{sub_batch}/bw1_keep{retain_count}",
+                    trace_path=f"train/sb{sub_batch}/bw1_{retain_tag}",
                     final_counts_per_block=bw1_final,
-                    initial_counts_per_block=[0 for _ in range(n)],
+                    initial_counts_per_block=bw1_init,
                 )
             except Exception as exc:
                 candidate_logs.append(
-                    f"candidate sub_batch={sub_batch} retain>={retain_count} status=bw1_failed end_md={list(end_md)} reason={exc}"
+                    f"candidate sub_batch={sub_batch} profile={retain_tag} status=bw1_failed end_md={list(end_md)} reason={exc}"
                 )
                 continue
 
-            _progress(config, f"[Training] sub_batch={sub_batch}: solve BW2 with end_md={list(end_md)}")
+            _progress(config, f"[Training] sub_batch={sub_batch}: solve BW2 profile={retain_tag} end_md={list(end_md)}")
             try:
                 bw2_res = _flat_search_prepared(
                     work_blocks=bw2_blocks,
@@ -1193,13 +1228,13 @@ def _search_training_with_recomputation(
                     block_outputs_override=bw2_outputs_base,
                     hierarchy_level=0,
                     hierarchy_notes=[],
-                    trace_path=f"train/sb{sub_batch}/bw2_keep{retain_count}",
+                    trace_path=f"train/sb{sub_batch}/bw2_{retain_tag}",
                     final_counts_per_block=bw2_final,
                     initial_counts_per_block=[0 for _ in range(len(bw2_blocks))],
                 )
             except Exception as exc:
                 candidate_logs.append(
-                    f"candidate sub_batch={sub_batch} retain>={retain_count} status=bw2_failed end_md={list(end_md)} reason={exc}"
+                    f"candidate sub_batch={sub_batch} profile={retain_tag} status=bw2_failed end_md={list(end_md)} reason={exc}"
                 )
                 continue
 
@@ -1214,7 +1249,7 @@ def _search_training_with_recomputation(
 
             notes = [
                 f"training_mode=True sub_batch={sub_batch}",
-                f"retain_target={retain_count}",
+                f"retain_profile={retain_tag}",
                 f"fw_end_met_d={list(end_md)}",
                 f"bw1_final_counts={bw1_final}",
                 f"bw2_final_counts={bw2_final}",
@@ -1241,11 +1276,11 @@ def _search_training_with_recomputation(
             )
 
             candidate_logs.append(
-                f"candidate sub_batch={sub_batch} retain>={retain_count} status=ok end_md={list(end_md)} total_edp={total_edp:.6e}"
+                f"candidate sub_batch={sub_batch} profile={retain_tag} status=ok end_md={list(end_md)} total_edp={total_edp:.6e}"
             )
             _progress(
                 config,
-                f"[Training] sub_batch={sub_batch} retain>={retain_count} total_latency={total_latency:.6e} total_energy={total_energy:.6e} total_edp={total_edp:.6e}",
+                f"[Training] sub_batch={sub_batch} profile={retain_tag} total_latency={total_latency:.6e} total_energy={total_energy:.6e} total_edp={total_edp:.6e}",
             )
 
             if best_result is None or merged.total_edp < best_result.total_edp:
@@ -1291,6 +1326,12 @@ def search_schedule(
         hierarchy_notes=[],
         trace_path="root",
     )
+
+
+
+
+
+
 
 
 

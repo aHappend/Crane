@@ -1,0 +1,24 @@
+experiment=transformer_training_reproduction
+source_ref=src/nns/transformer.cpp
+mode=FW_BW1_BW2_recomputation
+raw_layer_count=471
+num_pes=2
+batch_size=128
+candidate_sub_batches=[32]
+use_all_sub_batch_factors=False
+hardware_profile=paper_7_3
+best_sub_batch=32
+total_compute_latency=0.579573
+total_compute_energy=0.680366
+total_memory_latency=1.384240
+total_memory_energy=0.987430
+total_latency=1.384240
+total_energy=1.667796
+total_edp=2.308630
+note=training_mode=True sub_batch=32
+note=retain_target=2
+note=fw_end_met_d=[2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+note=bw1_final_counts=[2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+note=bw2_final_counts=[2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+note=candidate sub_batch=32 retain>=0 status=ok end_md=[4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4] total_edp=3.324573e+00
+note=candidate sub_batch=32 retain>=1 status=ok end_md=[3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3] total_edp=2.793432e+00
