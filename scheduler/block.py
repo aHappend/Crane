@@ -33,6 +33,21 @@ class Block:
     def layer_count(self) -> int:
         return sum(1 for _ in self.iter_layers())
 
+    def aggregate_map_dims(self) -> tuple[float, float, float, float]:
+        layers = list(self.iter_layers())
+        if not layers:
+            return (1.0, 1.0, 1.0, 1.0)
+
+        total_flops = sum(max(1.0, float(layer.flops)) for layer in layers)
+        acc = [0.0, 0.0, 0.0, 0.0]
+        for layer in layers:
+            weight = max(1.0, float(layer.flops)) / max(1.0, total_flops)
+            dims = layer.effective_map_dims()
+            for i in range(4):
+                acc[i] += weight * max(1.0, float(dims[i]))
+
+        return tuple(max(1.0, v) for v in acc)
+
 
 def derive_block_dependencies(blocks: Sequence[Block]) -> list[tuple[int, int]]:
     """Build block-level dependency edges from layer-level DAG links."""

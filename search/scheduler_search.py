@@ -563,6 +563,8 @@ def _flat_search_prepared(
     trace_path: str | None = None,
     final_counts_per_block: Sequence[int] | None = None,
     initial_counts_per_block: Sequence[int] | None = None,
+    state_count_lower_bounds: Sequence[Sequence[int | None]] | None = None,
+    state_count_upper_bounds: Sequence[Sequence[int | None]] | None = None,
     enforce_end_dram_dependency: bool = False,
 ) -> SearchResult:
     if not work_blocks:
@@ -587,6 +589,7 @@ def _flat_search_prepared(
     if initial_counts_per_block is not None and len(initial_counts_per_block) != len(work_blocks):
         raise ValueError("initial_counts_per_block length mismatch")
 
+    block_map_dims = [list(b.aggregate_map_dims()) for b in work_blocks]
     block_names = [b.name for b in work_blocks]
 
     n_states, state_order, categories, active_pes, state_active_blocks = _build_state_metadata(
@@ -657,6 +660,8 @@ def _flat_search_prepared(
                 allow_fallback=config.allow_solver_fallback,
                 final_counts_per_block=final_counts_per_block,
                 initial_counts_per_block=initial_counts_per_block,
+                state_count_lower_bounds=state_count_lower_bounds,
+                state_count_upper_bounds=state_count_upper_bounds,
             )
         except Exception as exc:
             _progress(config, f"[Stage-1] ScT infeasible/failed for sub_batch={sub_batch}: {exc}")
@@ -1032,6 +1037,59 @@ def _training_end_md_profiles(total_sub_batches: int, n_blocks: int) -> list[tup
     return profiles
 
 
+def _empty_state_bounds(num_states: int, num_blocks: int) -> list[list[int | None]]:
+    return [[None for _ in range(num_blocks)] for _ in range(num_states)]
+
+
+def _bw1_eq14_state_bounds_from_forward_end_md(
+    end_md: Sequence[int],
+    total_sub_batches: int,
+) -> tuple[list[list[int | None]], list[list[int | None]], list[int], list[int]]:
+    n = len(end_md)
+    num_states = 2 * n - 1
+    lower = _empty_state_bounds(num_states, n)
+    upper = _empty_state_bounds(num_states, n)
+
+    stored_counts = [max(0, int(total_sub_batches) - int(v)) for v in end_md]
+    final_counts = [stored_counts[n - 1 - j] for j in range(n)]
+    init_counts = _bw1_initial_counts_from_forward_end_md(end_md)
+
+    for j in range(n):
+        init_j = int(init_counts[j])
+        final_j = int(final_counts[j])
+        for i in range(0, j):
+            lower[i][j] = init_j
+            upper[i][j] = init_j
+        finish = n + j - 1
+        for i in range(finish, num_states):
+            lower[i][j] = final_j
+            upper[i][j] = final_j
+
+    return lower, upper, init_counts, final_counts
+
+
+def _bw2_eq15_state_bounds_from_forward_end_md(
+    end_md: Sequence[int],
+) -> tuple[list[list[int | None]], list[list[int | None]], list[int]]:
+    n = len(end_md)
+    num_blocks = 2 * n
+    num_states = 2 * num_blocks - 1
+    lower = _empty_state_bounds(num_states, num_blocks)
+    upper = _empty_state_bounds(num_states, num_blocks)
+
+    discarded_counts = [max(0, int(v)) for v in end_md]
+    final_counts = list(discarded_counts) + [discarded_counts[n - 1 - j] for j in range(n)]
+
+    for j in range(num_blocks):
+        final_j = int(final_counts[j])
+        finish = num_blocks + j - 1
+        for i in range(finish, num_states):
+            lower[i][j] = final_j
+            upper[i][j] = final_j
+
+    return lower, upper, final_counts
+
+
 def _search_training_with_recomputation(
     blocks: Sequence[Block],
     config: SearchConfig,
@@ -1191,12 +1249,11 @@ def _search_training_with_recomputation(
             if end_md in seen_end_md:
                 continue
             seen_end_md.add(end_md)
-
-            stored_counts = [max(0, total_sub - v) for v in end_md]
-            discarded_counts = [max(0, v) for v in end_md]
-            bw1_final = [stored_counts[n - 1 - i] for i in range(n)]
-            bw1_init = _bw1_initial_counts_from_forward_end_md(end_md)
-            bw2_final = list(discarded_counts) + [discarded_counts[n - 1 - i] for i in range(n)]
+            bw1_lb, bw1_ub, bw1_init, bw1_final = _bw1_eq14_state_bounds_from_forward_end_md(
+                end_md=end_md,
+                total_sub_batches=total_sub,
+            )
+            bw2_lb, bw2_ub, bw2_final = _bw2_eq15_state_bounds_from_forward_end_md(end_md)
 
             _progress(config, f"[Training] sub_batch={sub_batch}: solve BW1 profile={retain_tag} end_md={list(end_md)}")
             try:
@@ -1211,6 +1268,8 @@ def _search_training_with_recomputation(
                     trace_path=f"train/sb{sub_batch}/bw1_{retain_tag}",
                     final_counts_per_block=bw1_final,
                     initial_counts_per_block=bw1_init,
+                    state_count_lower_bounds=bw1_lb,
+                    state_count_upper_bounds=bw1_ub,
                 )
             except Exception as exc:
                 candidate_logs.append(
@@ -1231,6 +1290,8 @@ def _search_training_with_recomputation(
                     trace_path=f"train/sb{sub_batch}/bw2_{retain_tag}",
                     final_counts_per_block=bw2_final,
                     initial_counts_per_block=[0 for _ in range(len(bw2_blocks))],
+                    state_count_lower_bounds=bw2_lb,
+                    state_count_upper_bounds=bw2_ub,
                 )
             except Exception as exc:
                 candidate_logs.append(
@@ -1250,6 +1311,7 @@ def _search_training_with_recomputation(
             notes = [
                 f"training_mode=True sub_batch={sub_batch}",
                 f"retain_profile={retain_tag}",
+                "explicit_bw_constraints=eq14_eq15",
                 f"fw_end_met_d={list(end_md)}",
                 f"bw1_final_counts={bw1_final}",
                 f"bw2_final_counts={bw2_final}",
@@ -1326,17 +1388,4 @@ def search_schedule(
         hierarchy_notes=[],
         trace_path="root",
     )
-
-
-
-
-
-
-
-
-
-
-
-
-
 

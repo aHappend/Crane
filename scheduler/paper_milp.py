@@ -37,19 +37,112 @@ def _active_blocks(state: int, num_blocks: int) -> list[int]:
     return [j for j in range(num_blocks) if state in _processing_window(j, num_blocks)]
 
 
+
+def _normalize_state_bound_matrix(
+    name: str,
+    matrix: Sequence[Sequence[int | None]] | None,
+    num_states: int,
+    num_blocks: int,
+) -> list[list[int | None]] | None:
+    if matrix is None:
+        return None
+    if len(matrix) != num_states:
+        raise ValueError(f"{name} row count must equal number of states")
+
+    out: list[list[int | None]] = []
+    for i, row in enumerate(matrix):
+        if len(row) != num_blocks:
+            raise ValueError(f"{name}[{i}] column count must equal number of blocks")
+        norm_row: list[int | None] = []
+        for v in row:
+            norm_row.append(None if v is None else int(v))
+        out.append(norm_row)
+    return out
+
+
+def _factorizations4(total_tiles: int) -> list[tuple[int, int, int, int]]:
+    total = max(1, int(total_tiles))
+    out: list[tuple[int, int, int, int]] = []
+    for a in range(1, total + 1):
+        if total % a != 0:
+            continue
+        rem1 = total // a
+        for b in range(1, rem1 + 1):
+            if rem1 % b != 0:
+                continue
+            rem2 = rem1 // b
+            for c in range(1, rem2 + 1):
+                if rem2 % c != 0:
+                    continue
+                d = rem2 // c
+                out.append((a, b, c, d))
+    return out
+
+
+def _infer_default_map_dims(flops: float) -> tuple[float, float, float, float]:
+    val = max(1.0, float(flops))
+    d1 = max(1.0, val ** 0.25)
+    d2 = max(1.0, val ** 0.25)
+    d3 = max(1.0, val ** 0.25)
+    d4 = max(1.0, val / max(1.0, d1 * d2 * d3))
+    return d1, d2, d3, d4
+
+
+def _best_utilization_for_tiles(
+    dims: Sequence[float],
+    tiles: int,
+) -> float:
+    shape = [max(1.0, float(v)) for v in dims]
+    best = 1e-6
+    for k1, k2, k3, k4 in _factorizations4(max(1, int(tiles))):
+        factors = [float(k1), float(k2), float(k3), float(k4)]
+        util = 1.0
+        for dim_q, fac_q in zip(shape, factors):
+            packs = max(1.0, float(np.ceil(dim_q / fac_q)))
+            util *= dim_q / max(1.0, packs * fac_q)
+        if util > best:
+            best = util
+    return max(1e-6, min(1.0, best))
+
+
+def _integer_tile_allocation(
+    active: Sequence[int],
+    block_flops: Sequence[float],
+    num_pes: int,
+) -> tuple[list[int], float]:
+    if not active:
+        return [], 1.0
+
+    weights = [max(1e-9, float(block_flops[j])) for j in active]
+    total = sum(weights)
+    alloc = [1 for _ in active]
+    if num_pes > len(active):
+        remaining = num_pes - len(active)
+        raw = [remaining * w / max(1e-9, total) for w in weights]
+        extra = [int(np.floor(v)) for v in raw]
+        alloc = [a + e for a, e in zip(alloc, extra)]
+        used = sum(extra)
+        frac_order = sorted(
+            range(len(active)),
+            key=lambda idx: (raw[idx] - np.floor(raw[idx]), weights[idx]),
+            reverse=True,
+        )
+        for idx in frac_order[: max(0, remaining - used)]:
+            alloc[idx] += 1
+
+    overcommit = max(1.0, float(sum(alloc)) / max(1.0, float(num_pes)))
+    return alloc, overcommit
+
+
 def _state_cost_coeffs(
     block_flops: Sequence[float],
+    block_map_dims: Sequence[Sequence[float]] | None,
     num_states: int,
     num_pes: int,
     compute_power_per_tile: float,
     energy_per_op: float,
 ) -> tuple[list[float], list[float]]:
-    """Compute per-state latency/energy unit coefficients following Eq.16-20 spirit.
-
-    For each state i:
-    - latency coefficient uses bottleneck sub-block latency in state-i (Eq.18 max_j)
-    - energy coefficient sums normalized FLOPs across active sub-blocks (Eq.20)
-    """
+    """Compute per-state latency/energy coefficients with SET-style tile factorization."""
 
     lat: list[float] = []
     ene: list[float] = []
@@ -61,20 +154,19 @@ def _state_cost_coeffs(
             ene.append(0.0)
             continue
 
-        total_state_flops = sum(max(1e-9, float(block_flops[j])) for j in active)
+        alloc, overcommit = _integer_tile_allocation(active, block_flops, num_pes)
         per_block_latency: list[float] = []
         per_block_energy: list[float] = []
 
-        for j in active:
-            # Figure-4 style proportional tile assignment (continuous approximation).
-            tile_share = float(num_pes) * float(block_flops[j]) / total_state_flops
-            tile_share = max(1e-6, tile_share)
-
-            # Utilization proxy in [0.70, 0.95].
-            util = 0.70 + 0.25 * min(1.0, tile_share / max(1.0, float(num_pes)))
-            util = max(1e-6, util)
-
-            l_ij = float(block_flops[j]) / (util * tile_share * max(1e-9, compute_power_per_tile))
+        for local_idx, j in enumerate(active):
+            tiles = max(1, int(alloc[local_idx]))
+            dims = (
+                [float(v) for v in block_map_dims[j]]
+                if block_map_dims is not None
+                else list(_infer_default_map_dims(block_flops[j]))
+            )
+            util = _best_utilization_for_tiles(dims=dims, tiles=tiles)
+            l_ij = overcommit * float(block_flops[j]) / (util * float(tiles) * max(1e-9, compute_power_per_tile))
             e_ij = energy_per_op * float(block_flops[j]) / util
             per_block_latency.append(l_ij)
             per_block_energy.append(e_ij)
@@ -83,7 +175,6 @@ def _state_cost_coeffs(
         ene.append(sum(per_block_energy))
 
     return lat, ene
-
 
 def _add_mccormick_product_objective(
     solver: "pywraplp.Solver",
@@ -112,6 +203,7 @@ def _add_mccormick_product_objective(
 def _solve_with_ortools(
     block_flops: Sequence[float],
     block_outputs: Sequence[float],
+    block_map_dims: Sequence[Sequence[float]] | None,
     total_sub_batches: int,
     block_dependencies: Iterable[tuple[int, int]],
     num_pes: int,
@@ -127,6 +219,8 @@ def _solve_with_ortools(
     energy_per_op: float,
     final_counts_per_block: Sequence[int] | None,
     initial_counts_per_block: Sequence[int] | None,
+    state_count_lower_bounds: Sequence[Sequence[int | None]] | None,
+    state_count_upper_bounds: Sequence[Sequence[int | None]] | None,
 ) -> ScTOptimizationResult:
     del block_outputs  # not used in ScT compute-side MILP.
 
@@ -146,6 +240,19 @@ def _solve_with_ortools(
         raise ValueError("final_counts_per_block length must equal number of blocks")
     if initial_counts_per_block is not None and len(initial_counts_per_block) != n_blocks:
         raise ValueError("initial_counts_per_block length must equal number of blocks")
+
+    lower_bounds = _normalize_state_bound_matrix(
+        "state_count_lower_bounds",
+        state_count_lower_bounds,
+        num_states,
+        n_blocks,
+    )
+    upper_bounds = _normalize_state_bound_matrix(
+        "state_count_upper_bounds",
+        state_count_upper_bounds,
+        num_states,
+        n_blocks,
+    )
 
     default_total = int(total_sub_batches)
     per_block_final = [
@@ -169,6 +276,23 @@ def _solve_with_ortools(
 
     sct = [[solver.IntVar(0, int(max_final), f"sct_{i}_{j}") for j in range(n_blocks)] for i in range(num_states)]
     w = [solver.IntVar(0, int(max_final), f"w_{i}") for i in range(num_states)]
+
+    for i in range(num_states):
+        for j in range(n_blocks):
+            lb = None if lower_bounds is None else lower_bounds[i][j]
+            ub = None if upper_bounds is None else upper_bounds[i][j]
+            if lb is not None and lb < 0:
+                raise ValueError("state_count_lower_bounds must be >= 0")
+            if ub is not None and ub < 0:
+                raise ValueError("state_count_upper_bounds must be >= 0")
+            if lb is not None and lb > int(max_final):
+                raise ValueError("state_count_lower_bounds exceeds feasible maximum")
+            if ub is not None and lb is not None and lb > ub:
+                raise ValueError("state count lower bound cannot exceed upper bound")
+            if lb is not None:
+                solver.Add(sct[i][j] >= int(lb))
+            if ub is not None:
+                solver.Add(sct[i][j] <= int(ub))
 
     y = [solver.IntVar(0, 1, f"y_{i}") for i in range(num_states)]
     for i in range(num_states):
@@ -240,6 +364,7 @@ def _solve_with_ortools(
     # Eq.22: minimize compute-related EDP with McCormick linearization.
     lat_coeff, ene_coeff = _state_cost_coeffs(
         block_flops=block_flops,
+        block_map_dims=block_map_dims,
         num_states=num_states,
         num_pes=num_pes,
         compute_power_per_tile=compute_power_per_tile,
@@ -295,6 +420,7 @@ def _solve_with_ortools(
 def _solve_fallback(
     block_flops: Sequence[float],
     block_outputs: Sequence[float],
+    block_map_dims: Sequence[Sequence[float]] | None,
     total_sub_batches: int,
     num_pes: int,
     weight_latency: float,
@@ -312,6 +438,7 @@ def _solve_fallback(
     sct = build_weighted_sct(num_states, list(block_flops), total_sub_batches)
     lat_coeff, ene_coeff = _state_cost_coeffs(
         block_flops=block_flops,
+        block_map_dims=block_map_dims,
         num_states=num_states,
         num_pes=num_pes,
         compute_power_per_tile=compute_power_per_tile,
@@ -339,6 +466,7 @@ def _solve_fallback(
 def optimize_sct_table(
     block_flops: Sequence[float],
     block_outputs: Sequence[float],
+    block_map_dims: Sequence[Sequence[float]] | None = None,
     total_sub_batches: int,
     block_dependencies: Iterable[tuple[int, int]],
     num_pes: int,
@@ -355,16 +483,19 @@ def optimize_sct_table(
     allow_fallback: bool = True,
     final_counts_per_block: Sequence[int] | None = None,
     initial_counts_per_block: Sequence[int] | None = None,
+    state_count_lower_bounds: Sequence[Sequence[int | None]] | None = None,
+    state_count_upper_bounds: Sequence[Sequence[int | None]] | None = None,
 ) -> ScTOptimizationResult:
     if pywraplp is None:
         if not allow_fallback:
             raise RuntimeError("OR-Tools is unavailable and fallback is disabled")
         # Fallback path only supports canonical equal-final-count ScT.
-        if final_counts_per_block is not None or initial_counts_per_block is not None:
+        if final_counts_per_block is not None or initial_counts_per_block is not None or state_count_lower_bounds is not None or state_count_upper_bounds is not None:
             raise RuntimeError("fallback does not support custom block final/initial counts")
         return _solve_fallback(
             block_flops,
             block_outputs,
+            block_map_dims,
             total_sub_batches,
             num_pes,
             weight_latency,
@@ -379,6 +510,7 @@ def optimize_sct_table(
         return _solve_with_ortools(
             block_flops,
             block_outputs,
+            block_map_dims,
             total_sub_batches,
             block_dependencies,
             num_pes,
@@ -394,15 +526,18 @@ def optimize_sct_table(
             energy_per_op,
             final_counts_per_block,
             initial_counts_per_block,
+            state_count_lower_bounds,
+            state_count_upper_bounds,
         )
     except Exception:
         if not allow_fallback:
             raise
-        if final_counts_per_block is not None or initial_counts_per_block is not None:
+        if final_counts_per_block is not None or initial_counts_per_block is not None or state_count_lower_bounds is not None or state_count_upper_bounds is not None:
             raise
         return _solve_fallback(
             block_flops,
             block_outputs,
+            block_map_dims,
             total_sub_batches,
             num_pes,
             weight_latency,
@@ -412,4 +547,14 @@ def optimize_sct_table(
             compute_power_per_tile,
             energy_per_op,
         )
+
+
+
+
+
+
+
+
+
+
 

@@ -22,6 +22,8 @@ def parse_layers(specs: Iterable[dict]) -> Dict[str, Layer]:
             name=spec["name"],
             flops=float(spec["flops"]),
             output_size=float(spec["output_size"]),
+            op_type=str(spec.get("op_type", "generic")),
+            map_dims=(tuple(float(v) for v in spec["map_dims"]) if spec.get("map_dims") is not None else None),
         )
 
     for spec in specs:
@@ -53,3 +55,4 @@ def topological_sort(layers: Iterable[Layer]) -> List[Layer]:
         raise ValueError("DAG contains cycles")
 
     return result
+
