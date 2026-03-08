@@ -125,6 +125,8 @@ def _solve_with_ortools(
     dependency_gap: int,
     compute_power_per_tile: float,
     energy_per_op: float,
+    final_counts_per_block: Sequence[int] | None,
+    initial_counts_per_block: Sequence[int] | None,
 ) -> ScTOptimizationResult:
     del block_outputs  # not used in ScT compute-side MILP.
 
@@ -140,54 +142,78 @@ def _solve_with_ortools(
     if max_batches_per_state is not None and len(max_batches_per_state) != num_states:
         raise ValueError("max_batches_per_state length must equal num_states")
 
+    if final_counts_per_block is not None and len(final_counts_per_block) != n_blocks:
+        raise ValueError("final_counts_per_block length must equal number of blocks")
+    if initial_counts_per_block is not None and len(initial_counts_per_block) != n_blocks:
+        raise ValueError("initial_counts_per_block length must equal number of blocks")
+
+    default_total = int(total_sub_batches)
+    per_block_final = [
+        int(final_counts_per_block[j]) if final_counts_per_block is not None else default_total
+        for j in range(n_blocks)
+    ]
+    per_block_init = [
+        int(initial_counts_per_block[j]) if initial_counts_per_block is not None else 0
+        for j in range(n_blocks)
+    ]
+    if any(v < 0 for v in per_block_final) or any(v < 0 for v in per_block_init):
+        raise ValueError("final/init counts must be >= 0")
+    if any(per_block_init[j] > per_block_final[j] for j in range(n_blocks)):
+        raise ValueError("initial count cannot exceed final count")
+
+    max_final = max(per_block_final) if per_block_final else default_total
+
     solver = pywraplp.Solver.CreateSolver("SCIP")
     if solver is None:
         raise RuntimeError("OR-Tools SCIP solver is not available")
 
-    sct = [[solver.IntVar(0, int(total_sub_batches), f"sct_{i}_{j}") for j in range(n_blocks)] for i in range(num_states)]
-    w = [solver.IntVar(0, int(total_sub_batches), f"w_{i}") for i in range(num_states)]
+    sct = [[solver.IntVar(0, int(max_final), f"sct_{i}_{j}") for j in range(n_blocks)] for i in range(num_states)]
+    w = [solver.IntVar(0, int(max_final), f"w_{i}") for i in range(num_states)]
 
     y = [solver.IntVar(0, 1, f"y_{i}") for i in range(num_states)]
     for i in range(num_states):
-        cap = int(total_sub_batches) if max_batches_per_state is None else int(max_batches_per_state[i])
+        cap = int(max_final) if max_batches_per_state is None else int(max_batches_per_state[i])
         cap = max(0, cap)
         solver.Add(w[i] <= cap)
-        solver.Add(w[i] <= int(total_sub_batches) * y[i])
+        solver.Add(w[i] <= int(max_final) * y[i])
         if min_batch_if_active > 0:
             solver.Add(w[i] >= int(min_batch_if_active) * y[i])
 
-    solver.Add(solver.Sum(y) >= int(max(1, min_active_states)))
+    solver.Add(solver.Sum(y) >= int(max(0, min_active_states)))
 
     # Eq.1/2/3/4/6 for ScT.
     for j in range(n_blocks):
         win = list(_processing_window(j, n_blocks))
+        init_j = int(per_block_init[j])
+        final_j = int(per_block_final[j])
+        need_j = final_j - init_j
 
         # Eq.2 before block-j activation.
         for i in range(0, j):
-            solver.Add(sct[i][j] == 0)
+            solver.Add(sct[i][j] == init_j)
 
         # Eq.6 cumulative accumulation within involved states.
         for i in win:
             if i >= num_states:
                 continue
             if i == 0:
-                solver.Add(sct[i][j] == w[i])
+                solver.Add(sct[i][j] == init_j + w[i])
             elif i == j:
-                # i-1 is outside active window for block-j, so previous cumulative is 0.
-                solver.Add(sct[i][j] == w[i])
+                # i-1 is outside active window for block-j, so previous cumulative is init_j.
+                solver.Add(sct[i][j] == init_j + w[i])
             else:
                 solver.Add(sct[i][j] == sct[i - 1][j] + w[i])
 
         # Eq.3 after block-j completed.
         finish = n_blocks + j - 1
         for i in range(finish, num_states):
-            solver.Add(sct[i][j] == int(total_sub_batches))
+            solver.Add(sct[i][j] == final_j)
 
         # Constraint-1 completeness for each sub-block involved state set A_Bj.
         win_vars = [w[i] for i in win if 0 <= i < num_states]
         if not win_vars:
             raise RuntimeError("invalid processing window")
-        solver.Add(solver.Sum(win_vars) == int(total_sub_batches))
+        solver.Add(solver.Sum(win_vars) == int(need_j))
 
         # Eq.4 monotonicity.
         for i in range(num_states - 1):
@@ -229,8 +255,8 @@ def _solve_with_ortools(
         scaled_latency_expr = wlat * latency_expr
         scaled_energy_expr = wene * energy_expr
 
-        lat_ub = float(total_sub_batches) * sum(max(0.0, c) for c in lat_coeff)
-        ene_ub = float(total_sub_batches) * sum(max(0.0, c) for c in ene_coeff)
+        lat_ub = float(max_final) * sum(max(0.0, c) for c in lat_coeff)
+        ene_ub = float(max_final) * sum(max(0.0, c) for c in ene_coeff)
         _add_mccormick_product_objective(
             solver=solver,
             x_expr=scaled_latency_expr,
@@ -327,10 +353,15 @@ def optimize_sct_table(
     compute_power_per_tile: float = 1.0,
     energy_per_op: float = 1e-12,
     allow_fallback: bool = True,
+    final_counts_per_block: Sequence[int] | None = None,
+    initial_counts_per_block: Sequence[int] | None = None,
 ) -> ScTOptimizationResult:
     if pywraplp is None:
         if not allow_fallback:
             raise RuntimeError("OR-Tools is unavailable and fallback is disabled")
+        # Fallback path only supports canonical equal-final-count ScT.
+        if final_counts_per_block is not None or initial_counts_per_block is not None:
+            raise RuntimeError("fallback does not support custom block final/initial counts")
         return _solve_fallback(
             block_flops,
             block_outputs,
@@ -361,9 +392,13 @@ def optimize_sct_table(
             dependency_gap,
             compute_power_per_tile,
             energy_per_op,
+            final_counts_per_block,
+            initial_counts_per_block,
         )
     except Exception:
         if not allow_fallback:
+            raise
+        if final_counts_per_block is not None or initial_counts_per_block is not None:
             raise
         return _solve_fallback(
             block_flops,
@@ -377,6 +412,4 @@ def optimize_sct_table(
             compute_power_per_tile,
             energy_per_op,
         )
-
-
 

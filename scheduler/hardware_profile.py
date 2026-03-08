@@ -102,3 +102,54 @@ def paper_7_2_search_params(
         ),
         "compute_energy_per_op": float(p.compute_energy_pj_per_op) * 1e-12,
     }
+
+@dataclass(frozen=True)
+class PaperHardware73:
+    """Hardware profile from Crane paper Section 7.3 (training setup)."""
+
+    num_pes_default: int = 2
+    frequency_hz: float = 1e9
+    macs_per_tile: int = 16384  # 128x128
+    ops_per_mac: int = 2
+    sram_per_tile_mb: float = 10.0
+    noc_bandwidth_gb_s: float = 100.0
+    dram_bandwidth_gb_s: float = 300.0
+    compute_energy_pj_per_op: float = 0.018
+    noc_energy_pj_per_bit: float = 0.7
+    dram_energy_pj_per_bit: float = 3.9
+    dram_noc_hops: float = 1.0
+
+
+DEFAULT_PAPER_7_3 = PaperHardware73()
+
+
+def paper_7_3_search_params(
+    num_pes: int,
+    profile: PaperHardware73 | None = None,
+    dram_capacity_mb: float = 32768.0,
+) -> dict[str, float]:
+    """Return SearchConfig-compatible hardware parameters (Section 7.3)."""
+
+    p = profile or DEFAULT_PAPER_7_3
+
+    noc_bw_mb_s = float(p.noc_bandwidth_gb_s) * 1000.0
+    dram_bw_mb_s = float(p.dram_bandwidth_gb_s) * 1000.0
+
+    noc_j_per_mb = _pj_per_bit_to_j_per_mb(p.noc_energy_pj_per_bit)
+    dram_j_per_mb = _pj_per_bit_to_j_per_mb(p.dram_energy_pj_per_bit)
+    traffic_j_per_mb = float(p.dram_noc_hops) * noc_j_per_mb + dram_j_per_mb
+
+    return {
+        "sram_capacity": float(num_pes) * float(p.sram_per_tile_mb),
+        "dram_capacity": float(dram_capacity_mb),
+        "noc_bandwidth": noc_bw_mb_s,
+        "dram_bandwidth": dram_bw_mb_s,
+        "noc_energy_per_unit": noc_j_per_mb,
+        "dram_energy_per_unit": dram_j_per_mb,
+        "dram_noc_hops": float(p.dram_noc_hops),
+        "traffic_energy_per_unit": traffic_j_per_mb,
+        "compute_power_per_tile": (
+            float(p.macs_per_tile) * float(p.ops_per_mac) * float(p.frequency_hz)
+        ),
+        "compute_energy_per_op": float(p.compute_energy_pj_per_op) * 1e-12,
+    }

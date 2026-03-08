@@ -160,6 +160,7 @@ def _optimize_memory_with_ortools(
     weight_latency: float,
     weight_energy: float,
     use_edp_objective: bool,
+    enforce_end_dram_dependency: bool,
 ) -> MemoryOptimizationResult:
     solver = pywraplp.Solver.CreateSolver("SCIP")
     if solver is None:
@@ -205,6 +206,14 @@ def _optimize_memory_with_ortools(
             gate = solver.IntVar(0, 1, f"eq10_gate_{i}_{parent}_{child}")
             solver.Add(ms[i - 1][parent] <= child_done_prev + big_m * gate)
             solver.Add(md[i - 1][parent] <= child_done_prev + big_m * (1 - gate))
+
+    # Eq.13 (forward training): end-state DRAM order by dependency.
+    if enforce_end_dram_dependency and n_states > 0:
+        end_i = n_states - 1
+        for parent, child in block_dependencies:
+            if parent < 0 or child < 0 or parent >= n_blocks or child >= n_blocks:
+                continue
+            solver.Add(md[end_i][parent] >= md[end_i][child])
 
     # Eq.11 / Eq.12 memory capacity.
     for i in range(n_states):
@@ -366,6 +375,7 @@ def optimize_memory_table(
     weight_energy: float = 1.0,
     use_edp_objective: bool = True,
     allow_fallback: bool = True,
+    enforce_end_dram_dependency: bool = False,
 ) -> MemoryOptimizationResult:
     if pywraplp is None:
         if not allow_fallback:
@@ -388,9 +398,12 @@ def optimize_memory_table(
             weight_latency=weight_latency,
             weight_energy=weight_energy,
             use_edp_objective=use_edp_objective,
+            enforce_end_dram_dependency=enforce_end_dram_dependency,
         )
     except Exception:
         if not allow_fallback:
             raise
         met = build_memory_table(sct, sram_keep_ratio=heuristic_sram_keep_ratio)
         return MemoryOptimizationResult(table=met, objective=0.0, solver_name="heuristic-fallback")
+
+

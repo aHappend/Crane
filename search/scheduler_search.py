@@ -67,6 +67,18 @@ class SearchConfig:
     hierarchy_smoothing: float = 0.5
     hierarchy_min_child_blocks: int = 2
 
+    # Structure refinement (cost-driven gradual partition).
+    enable_structure_refinement: bool = True
+    structure_refine_max_trials: int = 6
+    structure_refine_min_improvement: float = 1e-4
+
+    # Training co-support (Section 5.3).
+    enable_training_recomputation: bool = False
+    backward_compute_scale: float = 2.0
+    backward_output_scale: float = 1.0
+    recompute_compute_scale: float = 1.0
+    recompute_output_scale: float = 1.0
+
 
 @dataclass
 class SearchResult:
@@ -94,6 +106,7 @@ class SearchResult:
     hierarchy_level: int = 0
     hierarchy_notes: list[str] = field(default_factory=list)
     hierarchy_traces: list[dict[str, object]] = field(default_factory=list)
+    phase_results: dict[str, dict[str, object]] = field(default_factory=dict)
 
 
 @dataclass
@@ -493,6 +506,52 @@ def _child_cfg(parent_cfg: SearchConfig, share: float, child_count: int) -> Sear
     )
 
 
+
+def _derive_or_default_dependencies(blocks: Sequence[Block]) -> list[tuple[int, int]]:
+    deps = derive_block_dependencies(blocks)
+    if not deps and len(blocks) > 1:
+        deps = _default_linear_dependencies(len(blocks))
+    return deps
+
+
+def _replace_block_with_children(
+    blocks: Sequence[Block],
+    block_index: int,
+    children: Sequence[Block],
+) -> list[Block]:
+    if block_index < 0 or block_index >= len(blocks):
+        raise IndexError("block_index out of range")
+    if not children:
+        return [_clone_block_tree(b) for b in blocks]
+
+    out: list[Block] = []
+    for i, blk in enumerate(blocks):
+        if i == block_index:
+            out.extend(_clone_block_tree(ch) for ch in children)
+        else:
+            out.append(_clone_block_tree(blk))
+    return out
+
+
+def _candidate_child_expansions(
+    blocks: Sequence[Block],
+    min_children: int,
+    max_trials: int,
+) -> list[tuple[int, list[Block]]]:
+    scored: list[tuple[tuple[float, float, float], int, list[Block]]] = []
+    for i, blk in enumerate(blocks):
+        children = _child_blocks_from_block(blk)
+        if len(children) < max(2, int(min_children)):
+            continue
+        # Prioritize large/complex blocks first for gradual partition trials.
+        score = (float(blk.layer_count()), float(len(children)), float(blk.total_flops()))
+        scored.append((score, i, children))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    if max_trials > 0:
+        scored = scored[: max(1, int(max_trials))]
+    return [(i, children) for _, i, children in scored]
+
 def _flat_search_prepared(
     work_blocks: Sequence[Block],
     block_deps: Sequence[tuple[int, int]],
@@ -502,6 +561,9 @@ def _flat_search_prepared(
     hierarchy_level: int = 0,
     hierarchy_notes: list[str] | None = None,
     trace_path: str | None = None,
+    final_counts_per_block: Sequence[int] | None = None,
+    initial_counts_per_block: Sequence[int] | None = None,
+    enforce_end_dram_dependency: bool = False,
 ) -> SearchResult:
     if not work_blocks:
         raise ValueError("blocks must not be empty")
@@ -519,6 +581,11 @@ def _flat_search_prepared(
         if len(block_outputs_override) != len(work_blocks):
             raise ValueError("block_outputs_override length mismatch")
         block_outputs = [max(1e-9, float(v)) for v in block_outputs_override]
+
+    if final_counts_per_block is not None and len(final_counts_per_block) != len(work_blocks):
+        raise ValueError("final_counts_per_block length mismatch")
+    if initial_counts_per_block is not None and len(initial_counts_per_block) != len(work_blocks):
+        raise ValueError("initial_counts_per_block length mismatch")
 
     block_names = [b.name for b in work_blocks]
 
@@ -547,7 +614,23 @@ def _flat_search_prepared(
         total_sub_batches = config.batch_size // sub_batch
         _progress(config, f"[Stage-1] solving ScT for sub_batch={sub_batch} ({sb_idx}/{len(sub_batch_candidates)}), total_sub_batches={total_sub_batches}")
 
-        min_active = max(1, min(int(config.min_active_states), n_states))
+        min_batch_if_active = int(config.min_batch_if_active)
+        if final_counts_per_block is not None:
+            if initial_counts_per_block is None:
+                init_counts = [0 for _ in range(len(work_blocks))]
+            else:
+                init_counts = [int(v) for v in initial_counts_per_block]
+            need_total = sum(
+                max(0, int(final_counts_per_block[j]) - init_counts[j])
+                for j in range(len(work_blocks))
+            )
+            if need_total <= 0:
+                min_active = 0
+                min_batch_if_active = 0
+            else:
+                min_active = max(1, min(int(config.min_active_states), n_states))
+        else:
+            min_active = max(1, min(int(config.min_active_states), n_states))
 
         caps = _state_caps(total_sub_batches, n_states, config.max_state_share)
         if caps is not None:
@@ -565,13 +648,15 @@ def _flat_search_prepared(
                 weight_energy=config.weight_energy,
                 num_states=n_states,
                 min_active_states=min_active,
-                min_batch_if_active=config.min_batch_if_active,
+                min_batch_if_active=min_batch_if_active,
                 max_batches_per_state=caps,
                 use_edp_objective=config.use_edp_objective,
                 dependency_gap=dep_gap,
                 compute_power_per_tile=config.compute_power_per_tile,
                 energy_per_op=config.compute_energy_per_op,
                 allow_fallback=config.allow_solver_fallback,
+                final_counts_per_block=final_counts_per_block,
+                initial_counts_per_block=initial_counts_per_block,
             )
         except Exception as exc:
             _progress(config, f"[Stage-1] ScT infeasible/failed for sub_batch={sub_batch}: {exc}")
@@ -634,6 +719,7 @@ def _flat_search_prepared(
                 weight_energy=config.weight_energy,
                 use_edp_objective=config.use_edp_objective,
                 allow_fallback=config.allow_solver_fallback,
+                enforce_end_dram_dependency=enforce_end_dram_dependency,
             )
         except Exception as exc:
             _progress(config, f"[Stage-2] MeT infeasible/failed for sub_batch={cand.sub_batch}: {exc}")
@@ -710,155 +796,370 @@ def _hierarchical_search(
     lineage: list[str],
 ) -> SearchResult:
     work_blocks, block_deps = _prepare_blocks_and_dependencies(blocks, config)
-    base_flops = [max(1e-9, b.total_flops()) for b in work_blocks]
-    base_outputs = [max(1e-9, b.total_output_size()) for b in work_blocks]
-
-    current_flops = list(base_flops)
-    current_outputs = list(base_outputs)
     notes: list[str] = []
     trace_map: dict[str, dict[str, object]] = {}
 
-    best_result: SearchResult | None = None
+    base_path = "root" if not lineage else "root/" + "/".join(lineage)
+    _progress(
+        config,
+        f"[Hier] start path={base_path} depth={depth} blocks={len(work_blocks)} deps={len(block_deps)}",
+    )
+
+    current_result = _flat_search_prepared(
+        work_blocks=work_blocks,
+        block_deps=block_deps,
+        config=config,
+        hierarchy_level=len(lineage),
+        hierarchy_notes=notes,
+        trace_path=base_path,
+    )
+    for tr in current_result.hierarchy_traces:
+        trace_map[str(tr.get("path", base_path))] = tr
 
     max_iters = max(1, int(config.max_hierarchy_iters))
-    smoothing = max(0.0, min(1.0, float(config.hierarchy_smoothing)))
+    rel_threshold = max(float(config.hierarchy_theta), float(config.structure_refine_min_improvement))
 
-    for iter_idx in range(max_iters):
-        flat_now = _flat_search_prepared(
-            work_blocks=work_blocks,
-            block_deps=block_deps,
-            config=config,
-            block_flops_override=current_flops,
-            block_outputs_override=current_outputs,
-            hierarchy_level=len(lineage),
-            hierarchy_notes=notes,
-            trace_path="root" if not lineage else "root/" + "/".join(lineage),
-        )
-
-        for tr in flat_now.hierarchy_traces:
-            trace_map[str(tr.get("path", f"level{len(lineage)}"))] = tr
-
-        notes.append(
-            f"level={len(lineage)} iter={iter_idx} parent_edp={flat_now.total_edp:.6e} blocks={len(work_blocks)}"
-        )
-
-        if best_result is None or flat_now.total_edp < best_result.total_edp:
-            best_result = flat_now
-
-        if depth <= 1:
-            notes.append(f"level={len(lineage)} depth_limit_reached")
-            break
-
-        next_flops = list(current_flops)
-        next_outputs = list(current_outputs)
-        changed = False
-
-        total_now_flops = max(1e-9, float(sum(current_flops)))
-
-        for bi, blk in enumerate(work_blocks):
-            child_blocks = _child_blocks_from_block(blk)
-            if len(child_blocks) < int(config.hierarchy_min_child_blocks):
-                continue
-
-            share = max(1e-6, current_flops[bi] / total_now_flops)
-            child_cfg = _child_cfg(config, share=share, child_count=len(child_blocks))
-            _progress(config, f"[Hier] level={len(lineage)} iter={iter_idx + 1} -> child block={blk.name} child_blocks={len(child_blocks)}")
-            child_result = _hierarchical_search(
-                blocks=child_blocks,
-                config=child_cfg,
-                depth=depth - 1,
-                lineage=lineage + [blk.name],
+    if depth <= 1 or not bool(config.enable_structure_refinement):
+        notes.append(f"level={len(lineage)} structure_refinement_disabled_or_depth_limit")
+    else:
+        for iter_idx in range(max_iters):
+            expansions = _candidate_child_expansions(
+                blocks=work_blocks,
+                min_children=int(config.hierarchy_min_child_blocks),
+                max_trials=int(config.structure_refine_max_trials),
             )
-            for tr in child_result.hierarchy_traces:
-                trace_map[str(tr.get("path", f"child/{blk.name}"))] = tr
+            if not expansions:
+                notes.append(f"level={len(lineage)} iter={iter_idx} no_expandable_block")
+                break
 
-            child_sub_batches = max(1, int(child_cfg.batch_size // max(1, child_result.best_sub_batch)))
-            flops_proxy = (
-                child_result.total_latency
-                * max(1e-9, float(child_cfg.compute_power_per_tile))
-                * float(max(1, child_cfg.num_pes))
-            ) / float(child_sub_batches)
-
-            child_dram_bw = (
-                float(child_cfg.dram_bandwidth)
-                if child_cfg.dram_bandwidth is not None
-                else float(child_cfg.noc_bandwidth)
+            _progress(
+                config,
+                f"[Hier] iter={iter_idx + 1}/{max_iters} evaluating {len(expansions)} structure candidates",
             )
-            denom = (
-                max(0.0, float(child_cfg.dram_noc_hops)) / max(1e-9, float(child_cfg.noc_bandwidth))
-                + 1.0 / max(1e-9, child_dram_bw)
-            )
-            total_traffic_volume = (
-                float(child_result.memory_latency) / max(1e-12, denom)
-                if child_result.memory_latency > 0
-                else 0.0
-            )
-            output_proxy = max(1e-9, total_traffic_volume / float(child_sub_batches))
 
-            new_flops = (1.0 - smoothing) * current_flops[bi] + smoothing * max(1e-9, flops_proxy)
-            new_outputs = (1.0 - smoothing) * current_outputs[bi] + smoothing * output_proxy
+            best_trial_result: SearchResult | None = None
+            best_trial_blocks: list[Block] | None = None
+            best_trial_deps: list[tuple[int, int]] | None = None
+            best_trial_block_name = ""
 
-            rel_f = abs(new_flops - current_flops[bi]) / max(1e-9, current_flops[bi])
-            rel_o = abs(new_outputs - current_outputs[bi]) / max(1e-9, current_outputs[bi])
-            if rel_f > 1e-3 or rel_o > 1e-3:
-                changed = True
+            for trial_idx, (bi, children) in enumerate(expansions, start=1):
+                parent_name = work_blocks[bi].name
+                cand_blocks = _replace_block_with_children(work_blocks, bi, children)
+                cand_deps = _derive_or_default_dependencies(cand_blocks)
+                cand_path = f"{base_path}/iter{iter_idx + 1}/expand_{trial_idx}_{parent_name}"
 
-            next_flops[bi] = new_flops
-            next_outputs[bi] = new_outputs
-
-            notes.append(
-                "level={} iter={} block={} child_blocks={} child_edp={:.6e} flops_proxy={:.6e} output_proxy={:.6e}".format(
-                    len(lineage),
-                    iter_idx,
-                    blk.name,
-                    len(child_blocks),
-                    child_result.total_edp,
-                    flops_proxy,
-                    output_proxy,
+                _progress(
+                    config,
+                    f"[Hier] trial={trial_idx}/{len(expansions)} expand block={parent_name} -> {len(children)} children",
                 )
+
+                try:
+                    cand_result = _flat_search_prepared(
+                        work_blocks=cand_blocks,
+                        block_deps=cand_deps,
+                        config=config,
+                        hierarchy_level=len(lineage),
+                        hierarchy_notes=notes,
+                        trace_path=cand_path,
+                    )
+                except Exception as exc:
+                    notes.append(
+                        f"level={len(lineage)} iter={iter_idx} trial={trial_idx} block={parent_name} infeasible={exc}"
+                    )
+                    _progress(config, f"[Hier] trial failed block={parent_name}: {exc}")
+                    continue
+
+                for tr in cand_result.hierarchy_traces:
+                    trace_map[str(tr.get("path", cand_path))] = tr
+
+                rel = (current_result.total_edp - cand_result.total_edp) / max(1e-9, abs(current_result.total_edp))
+                notes.append(
+                    f"level={len(lineage)} iter={iter_idx} trial={trial_idx} block={parent_name} "
+                    f"current_edp={current_result.total_edp:.6e} cand_edp={cand_result.total_edp:.6e} rel_improve={rel:.6e}"
+                )
+
+                if best_trial_result is None or cand_result.total_edp < best_trial_result.total_edp:
+                    best_trial_result = cand_result
+                    best_trial_blocks = cand_blocks
+                    best_trial_deps = cand_deps
+                    best_trial_block_name = parent_name
+
+            if best_trial_result is None or best_trial_blocks is None or best_trial_deps is None:
+                notes.append(f"level={len(lineage)} iter={iter_idx} all_structure_trials_failed")
+                break
+
+            best_rel = (current_result.total_edp - best_trial_result.total_edp) / max(
+                1e-9, abs(current_result.total_edp)
             )
+            if best_rel <= rel_threshold:
+                notes.append(
+                    f"level={len(lineage)} iter={iter_idx} no_significant_improvement "
+                    f"best_rel={best_rel:.6e} threshold={rel_threshold:.6e}"
+                )
+                _progress(
+                    config,
+                    f"[Hier] stop iter={iter_idx + 1}, best_rel={best_rel:.6e} <= threshold={rel_threshold:.6e}",
+                )
+                break
 
-        if not changed:
-            notes.append(f"level={len(lineage)} iter={iter_idx} no_child_update")
-            break
-
-        flat_next = _flat_search_prepared(
-            work_blocks=work_blocks,
-            block_deps=block_deps,
-            config=config,
-            block_flops_override=next_flops,
-            block_outputs_override=next_outputs,
-            hierarchy_level=len(lineage),
-            hierarchy_notes=notes,
-            trace_path="root" if not lineage else "root/" + "/".join(lineage),
-        )
-
-        for tr in flat_next.hierarchy_traces:
-            trace_map[str(tr.get("path", f"level{len(lineage)}"))] = tr
-
-        if best_result is None or flat_next.total_edp < best_result.total_edp:
-            best_result = flat_next
-
-        improvement = (flat_now.total_edp - flat_next.total_edp) / max(1e-9, abs(flat_now.total_edp))
-        notes.append(
-            f"level={len(lineage)} iter={iter_idx} child_feedback_improvement={improvement:.6e}"
-        )
-
-        current_flops = next_flops
-        current_outputs = next_outputs
-
-        if improvement <= float(config.hierarchy_theta):
+            work_blocks = best_trial_blocks
+            block_deps = best_trial_deps
+            current_result = best_trial_result
             notes.append(
-                f"level={len(lineage)} iter={iter_idx} converge_by_theta theta={config.hierarchy_theta}"
+                f"level={len(lineage)} iter={iter_idx} accept_expand block={best_trial_block_name} "
+                f"new_blocks={len(work_blocks)} new_edp={current_result.total_edp:.6e}"
             )
-            break
+            _progress(
+                config,
+                f"[Hier] accept iter={iter_idx + 1} expand={best_trial_block_name} "
+                f"new_blocks={len(work_blocks)} edp={current_result.total_edp:.6e}",
+            )
 
-    assert best_result is not None
-    best_result.hierarchy_notes = notes
-    best_result.hierarchy_level = len(lineage)
-    best_result.hierarchy_traces = [trace_map[k] for k in sorted(trace_map.keys())]
+    current_result.hierarchy_notes = notes
+    current_result.hierarchy_level = len(lineage)
+    current_result.hierarchy_traces = [trace_map[k] for k in sorted(trace_map.keys())]
+    return current_result
+
+
+def _reverse_dependencies_for_backward(
+    num_blocks: int,
+    forward_dependencies: Sequence[tuple[int, int]],
+) -> list[tuple[int, int]]:
+    # Forward dep p->c becomes backward dep c->p under reversed block order.
+    out: set[tuple[int, int]] = set()
+    for p, c in forward_dependencies:
+        if p < 0 or c < 0 or p >= num_blocks or c >= num_blocks or p == c:
+            continue
+        bp = num_blocks - 1 - c
+        bc = num_blocks - 1 - p
+        if bp != bc:
+            out.add((bp, bc))
+    if not out and num_blocks > 1:
+        return _default_linear_dependencies(num_blocks)
+    return sorted(out)
+
+
+def _phase_payload(res: SearchResult) -> dict[str, object]:
+    return {
+        "best_sub_batch": int(res.best_sub_batch),
+        "scheduled_blocks": list(res.scheduled_blocks),
+        "block_dependencies": list(res.block_dependencies),
+        "state_order": list(res.state_order),
+        "state_categories": list(res.state_categories),
+        "state_batches": list(res.milp_solution.state_batches),
+        "sct": res.sct.table.tolist(),
+        "met_s": res.met.sram.tolist(),
+        "met_d": res.met.dram.tolist(),
+        "compute_latency": float(res.compute_latency),
+        "compute_energy": float(res.compute_energy),
+        "memory_latency": float(res.memory_latency),
+        "memory_energy": float(res.memory_energy),
+        "total_latency": float(res.total_latency),
+        "total_energy": float(res.total_energy),
+        "total_edp": float(res.total_edp),
+    }
+
+
+def _search_training_with_recomputation(
+    blocks: Sequence[Block],
+    config: SearchConfig,
+) -> SearchResult:
+    work_blocks, block_deps = _prepare_blocks_and_dependencies(blocks, config)
+    n = len(work_blocks)
+    if n == 0:
+        raise ValueError("blocks must not be empty")
+
+    base_flops = [max(1e-9, float(b.total_flops())) for b in work_blocks]
+    base_outputs = [max(1e-9, float(b.total_output_size())) for b in work_blocks]
+
+    best_result: SearchResult | None = None
+    sub_batch_candidates = _effective_sub_batch_candidates(config)
+
+    _progress(
+        config,
+        f"[Training] start blocks={n} deps={len(block_deps)} candidates={sub_batch_candidates}",
+    )
+
+    for sb_idx, sub_batch in enumerate(sub_batch_candidates, start=1):
+        if sub_batch <= 0 or config.batch_size % sub_batch != 0:
+            _progress(
+                config,
+                f"[Training] skip invalid sub_batch={sub_batch} ({sb_idx}/{len(sub_batch_candidates)})",
+            )
+            continue
+
+        total_sub = int(config.batch_size // sub_batch)
+        phase_cfg = replace(
+            config,
+            candidate_sub_batches=[int(sub_batch)],
+            use_all_sub_batch_factors=False,
+            strict_paper_mode=False,
+            top_k1=1,
+            top_k2=1,
+            top_k1_ratio=0.0,
+            top_k2_ratio=0.0,
+            enable_hierarchical_pipeline=False,
+        )
+
+        _progress(
+            config,
+            f"[Training] sub_batch={sub_batch} ({sb_idx}/{len(sub_batch_candidates)}): solve FW",
+        )
+
+        try:
+            fw_res = _flat_search_prepared(
+                work_blocks=work_blocks,
+                block_deps=block_deps,
+                config=phase_cfg,
+                block_flops_override=base_flops,
+                block_outputs_override=base_outputs,
+                hierarchy_level=0,
+                hierarchy_notes=[],
+                trace_path=f"train/sb{sub_batch}/fw",
+                enforce_end_dram_dependency=True,
+            )
+        except Exception as exc:
+            _progress(config, f"[Training] FW failed for sub_batch={sub_batch}: {exc}")
+            continue
+
+        end_md_raw = list(fw_res.met.dram[-1, :]) if fw_res.met.dram.size > 0 else [0.0 for _ in range(n)]
+        end_md = [max(0, min(total_sub, int(round(v)))) for v in end_md_raw]
+        stored_counts = [max(0, total_sub - v) for v in end_md]
+        discarded_counts = [max(0, v) for v in end_md]
+
+        bw_blocks = [_clone_block_tree(b) for b in reversed(work_blocks)]
+        for i, b in enumerate(bw_blocks):
+            b.name = f"bw::{i:03d}::{b.name}"
+        bw_deps = _reverse_dependencies_for_backward(n, block_deps)
+
+        bw1_final = [stored_counts[n - 1 - i] for i in range(n)]
+        bw_flops = [base_flops[n - 1 - i] * max(1e-9, float(config.backward_compute_scale)) for i in range(n)]
+        bw_outputs = [base_outputs[n - 1 - i] * max(1e-9, float(config.backward_output_scale)) for i in range(n)]
+
+        _progress(config, f"[Training] sub_batch={sub_batch}: solve BW1")
+        try:
+            bw1_res = _flat_search_prepared(
+                work_blocks=bw_blocks,
+                block_deps=bw_deps,
+                config=phase_cfg,
+                block_flops_override=bw_flops,
+                block_outputs_override=bw_outputs,
+                hierarchy_level=0,
+                hierarchy_notes=[],
+                trace_path=f"train/sb{sub_batch}/bw1",
+                final_counts_per_block=bw1_final,
+                initial_counts_per_block=[0 for _ in range(n)],
+            )
+        except Exception as exc:
+            _progress(config, f"[Training] BW1 failed for sub_batch={sub_batch}: {exc}")
+            continue
+
+        # Step-2 has 2N blocks: recomputation-forward phase + backward phase.
+        rc_blocks = [_clone_block_tree(b) for b in work_blocks]
+        for i, b in enumerate(rc_blocks):
+            b.name = f"rc::{i:03d}::{b.name}"
+
+        bw2_back_blocks = [_clone_block_tree(b) for b in reversed(work_blocks)]
+        for i, b in enumerate(bw2_back_blocks):
+            b.name = f"bw2::{i:03d}::{b.name}"
+
+        bw2_blocks = rc_blocks + bw2_back_blocks
+        bw2_deps: set[tuple[int, int]] = set()
+
+        # Recomputation-forward dependencies.
+        for p, c in block_deps:
+            if 0 <= p < n and 0 <= c < n and p != c:
+                bw2_deps.add((p, c))
+
+        # Backward dependencies.
+        for p, c in bw_deps:
+            bw2_deps.add((n + p, n + c))
+
+        # Cross-phase dependencies: backward on layer-j waits for recomputed layer-j.
+        for j in range(n):
+            bw_j = n + (n - 1 - j)
+            bw2_deps.add((j, bw_j))
+
+        bw2_dep_list = sorted(bw2_deps)
+        if not bw2_dep_list and len(bw2_blocks) > 1:
+            bw2_dep_list = _default_linear_dependencies(len(bw2_blocks))
+
+        rc_flops = [f * max(1e-9, float(config.recompute_compute_scale)) for f in base_flops]
+        rc_outputs = [v * max(1e-9, float(config.recompute_output_scale)) for v in base_outputs]
+        bw2_flops = rc_flops + bw_flops
+        bw2_outputs = rc_outputs + bw_outputs
+        bw2_final = list(discarded_counts) + [discarded_counts[n - 1 - i] for i in range(n)]
+
+        _progress(config, f"[Training] sub_batch={sub_batch}: solve BW2")
+        try:
+            bw2_res = _flat_search_prepared(
+                work_blocks=bw2_blocks,
+                block_deps=bw2_dep_list,
+                config=phase_cfg,
+                block_flops_override=bw2_flops,
+                block_outputs_override=bw2_outputs,
+                hierarchy_level=0,
+                hierarchy_notes=[],
+                trace_path=f"train/sb{sub_batch}/bw2",
+                final_counts_per_block=bw2_final,
+                initial_counts_per_block=[0 for _ in range(len(bw2_blocks))],
+            )
+        except Exception as exc:
+            _progress(config, f"[Training] BW2 failed for sub_batch={sub_batch}: {exc}")
+            continue
+
+        total_compute_latency = fw_res.compute_latency + bw1_res.compute_latency + bw2_res.compute_latency
+        total_compute_energy = fw_res.compute_energy + bw1_res.compute_energy + bw2_res.compute_energy
+        total_memory_latency = fw_res.memory_latency + bw1_res.memory_latency + bw2_res.memory_latency
+        total_memory_energy = fw_res.memory_energy + bw1_res.memory_energy + bw2_res.memory_energy
+
+        total_latency = fw_res.total_latency + bw1_res.total_latency + bw2_res.total_latency
+        total_energy = fw_res.total_energy + bw1_res.total_energy + bw2_res.total_energy
+        total_edp = edp(total_latency, total_energy)
+
+        notes = [
+            f"training_mode=True sub_batch={sub_batch}",
+            f"fw_end_met_d={end_md}",
+            f"bw1_final_counts={bw1_final}",
+            f"bw2_final_counts={bw2_final}",
+        ]
+
+        phase_results = {
+            "fw": _phase_payload(fw_res),
+            "bw1": _phase_payload(bw1_res),
+            "bw2": _phase_payload(bw2_res),
+        }
+
+        merged = replace(
+            fw_res,
+            best_sub_batch=int(sub_batch),
+            compute_latency=float(total_compute_latency),
+            compute_energy=float(total_compute_energy),
+            memory_latency=float(total_memory_latency),
+            memory_energy=float(total_memory_energy),
+            total_latency=float(total_latency),
+            total_energy=float(total_energy),
+            total_edp=float(total_edp),
+            hierarchy_notes=notes,
+            phase_results=phase_results,
+        )
+
+        _progress(
+            config,
+            f"[Training] sub_batch={sub_batch} total_latency={total_latency:.6e} total_energy={total_energy:.6e} total_edp={total_edp:.6e}",
+        )
+
+        if best_result is None or merged.total_edp < best_result.total_edp:
+            best_result = merged
+
+    if best_result is None:
+        raise RuntimeError("No feasible training candidate found.")
+
+    _progress(
+        config,
+        f"[Training] best sub_batch={best_result.best_sub_batch} total_edp={best_result.total_edp:.6e}",
+    )
     return best_result
-
 
 def search_schedule(
     blocks: Sequence[Block],
@@ -869,6 +1170,9 @@ def search_schedule(
 
     if not blocks:
         raise ValueError("blocks must not be empty")
+
+    if bool(config.enable_training_recomputation):
+        return _search_training_with_recomputation(blocks=blocks, config=config)
 
     use_hier = bool(config.enable_hierarchical_pipeline) and int(config.max_hierarchy_depth) > 1
     if use_hier:
@@ -888,24 +1192,6 @@ def search_schedule(
         hierarchy_notes=[],
         trace_path="root",
     )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

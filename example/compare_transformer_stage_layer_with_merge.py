@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
 from example.run_transformer_min_layer_block_experiment import build_transformer_min_layers
 from example.schedule_html import write_schedule_html
 from scheduler.block import Block
+from scheduler.hardware_profile import paper_7_2_search_params
 from search.scheduler_search import SearchConfig, SearchResult, search_schedule
 
 
@@ -64,12 +65,23 @@ def _cfg(
     hierarchy_depth: int,
     hierarchy_iters: int,
     hierarchy_theta: float,
+    use_paper_hw_7_2: bool,
+    top_k1_ratio: float,
+    top_k2_ratio: float,
+    all_sub_batch_factors: bool,
+    verbose_progress: bool,
+    progress_prefix: str,
+    structure_refine_max_trials: int,
 ) -> SearchConfig:
+    hw_kwargs: dict[str, float] = {}
+    if use_paper_hw_7_2:
+        hw_kwargs = paper_7_2_search_params(num_pes=num_pes, dram_capacity_mb=30000.0)
+
     return SearchConfig(
         batch_size=128,
         candidate_sub_batches=[4, 8, 16, 32],
-        sram_capacity=15000.0,
-        dram_capacity=30000.0,
+        sram_capacity=float(hw_kwargs.get("sram_capacity", 15000.0)),
+        dram_capacity=float(hw_kwargs.get("dram_capacity", 30000.0)),
         num_pes=num_pes,
         enable_chain_block_merge=True,
         max_layers_per_block=max_layers_per_block,
@@ -80,15 +92,28 @@ def _cfg(
         strict_paper_mode=True,
         top_k1=4,
         top_k2=2,
+        top_k1_ratio=top_k1_ratio,
+        top_k2_ratio=top_k2_ratio,
+        use_all_sub_batch_factors=all_sub_batch_factors,
         use_edp_objective=True,
         dependency_gap=0,
         allow_solver_fallback=False,
+        verbose_progress=verbose_progress,
+        progress_prefix=progress_prefix,
+        noc_bandwidth=float(hw_kwargs.get("noc_bandwidth", 4096.0)),
+        dram_bandwidth=float(hw_kwargs.get("dram_bandwidth", 4096.0)),
+        noc_energy_per_unit=float(hw_kwargs.get("noc_energy_per_unit", 0.0)),
+        dram_energy_per_unit=float(hw_kwargs.get("dram_energy_per_unit", 0.0075)),
+        dram_noc_hops=float(hw_kwargs.get("dram_noc_hops", 1.0)),
+        compute_power_per_tile=float(hw_kwargs.get("compute_power_per_tile", 1.0)),
+        compute_energy_per_op=float(hw_kwargs.get("compute_energy_per_op", 1e-12)),
         enable_hierarchical_pipeline=hierarchical,
         max_hierarchy_depth=max(1, int(hierarchy_depth)),
         max_hierarchy_iters=max(1, int(hierarchy_iters)),
         hierarchy_theta=max(0.0, float(hierarchy_theta)),
+        enable_structure_refinement=bool(hierarchical),
+        structure_refine_max_trials=max(1, int(structure_refine_max_trials)),
     )
-
 
 def _delta_from_cumulative(cum):
     rows = []
@@ -209,6 +234,12 @@ def _run_candidates(
     hierarchy_depth: int,
     hierarchy_iters: int,
     hierarchy_theta: float,
+    use_paper_hw_7_2: bool,
+    top_k1_ratio: float,
+    top_k2_ratio: float,
+    all_sub_batch_factors: bool,
+    verbose_progress: bool,
+    structure_refine_max_trials: int,
 ) -> list[Candidate]:
     out: list[Candidate] = []
     for cap in caps:
@@ -219,6 +250,13 @@ def _run_candidates(
             hierarchy_depth=hierarchy_depth,
             hierarchy_iters=hierarchy_iters,
             hierarchy_theta=hierarchy_theta,
+            use_paper_hw_7_2=use_paper_hw_7_2,
+            top_k1_ratio=top_k1_ratio,
+            top_k2_ratio=top_k2_ratio,
+            all_sub_batch_factors=all_sub_batch_factors,
+            verbose_progress=verbose_progress,
+            progress_prefix=f"{mode}:cap{cap}",
+            structure_refine_max_trials=structure_refine_max_trials,
         )
         res = search_schedule(blocks, cfg)
         out.append(
@@ -231,7 +269,6 @@ def _run_candidates(
         )
     out.sort(key=lambda x: x.result.total_edp)
     return out
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Transformer stage-vs-layer compare with block merge enabled")
@@ -374,3 +411,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+

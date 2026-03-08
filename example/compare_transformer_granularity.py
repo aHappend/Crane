@@ -68,6 +68,11 @@ def _cfg(
     all_sub_batch_factors: bool,
     verbose_progress: bool,
     progress_prefix: str,
+    hierarchical: bool,
+    hier_depth: int,
+    hier_iters: int,
+    hier_theta: float,
+    structure_max_trials: int,
 ) -> SearchConfig:
     hw_kwargs: dict[str, float] = {}
     if use_paper_hw_7_2:
@@ -103,6 +108,12 @@ def _cfg(
         dram_noc_hops=float(hw_kwargs.get("dram_noc_hops", 1.0)),
         compute_power_per_tile=float(hw_kwargs.get("compute_power_per_tile", 1.0)),
         compute_energy_per_op=float(hw_kwargs.get("compute_energy_per_op", 1e-12)),
+        enable_hierarchical_pipeline=bool(hierarchical),
+        max_hierarchy_depth=max(1, int(hier_depth)),
+        max_hierarchy_iters=max(1, int(hier_iters)),
+        hierarchy_theta=max(0.0, float(hier_theta)),
+        enable_structure_refinement=bool(hierarchical),
+        structure_refine_max_trials=max(1, int(structure_max_trials)),
     )
 
 
@@ -180,6 +191,11 @@ def main() -> None:
     parser.add_argument("--top-k2-ratio", type=float, default=0.05)
     parser.add_argument("--all-sub-batch-factors", action="store_true", help="enumerate all factors of batch size for BS_sub")
     parser.add_argument("--verbose-progress", action="store_true", help="print live solver progress from scheduler")
+    parser.add_argument("--hierarchical", action="store_true", help="enable hierarchical block-structure refinement")
+    parser.add_argument("--hier-depth", type=int, default=2)
+    parser.add_argument("--hier-iters", type=int, default=2)
+    parser.add_argument("--hier-theta", type=float, default=0.01)
+    parser.add_argument("--structure-max-trials", type=int, default=2)
     args = parser.parse_args()
 
     if args.num_pes <= 0:
@@ -196,6 +212,11 @@ def main() -> None:
         all_sub_batch_factors=bool(args.all_sub_batch_factors),
         verbose_progress=bool(args.verbose_progress),
         progress_prefix="stage",
+        hierarchical=bool(args.hierarchical),
+        hier_depth=int(args.hier_depth),
+        hier_iters=int(args.hier_iters),
+        hier_theta=float(args.hier_theta),
+        structure_max_trials=int(args.structure_max_trials),
     )
     layer_cfg = _cfg(
         num_pes=args.num_pes,
@@ -205,6 +226,11 @@ def main() -> None:
         all_sub_batch_factors=bool(args.all_sub_batch_factors),
         verbose_progress=bool(args.verbose_progress),
         progress_prefix="layer",
+        hierarchical=bool(args.hierarchical),
+        hier_depth=int(args.hier_depth),
+        hier_iters=int(args.hier_iters),
+        hier_theta=float(args.hier_theta),
+        structure_max_trials=int(args.structure_max_trials),
     )
 
     print(
@@ -216,6 +242,11 @@ def main() -> None:
             "top_k2_ratio": float(args.top_k2_ratio),
             "all_sub_batch_factors": bool(args.all_sub_batch_factors),
             "verbose_progress": bool(args.verbose_progress),
+            "hierarchical": bool(args.hierarchical),
+            "hier_depth": int(args.hier_depth),
+            "hier_iters": int(args.hier_iters),
+            "hier_theta": float(args.hier_theta),
+            "structure_max_trials": int(args.structure_max_trials),
         },
     )
 
@@ -304,6 +335,11 @@ def main() -> None:
         f.write(f"config.dependency_gap={stage_cfg.dependency_gap}\n")
         f.write(f"config.allow_solver_fallback={stage_cfg.allow_solver_fallback}\n")
         f.write(f"config.paper_hw_7_2={bool(args.paper_hw_7_2)}\n")
+        f.write(f"config.hierarchical={bool(args.hierarchical)}\n")
+        f.write(f"config.hier_depth={int(args.hier_depth)}\n")
+        f.write(f"config.hier_iters={int(args.hier_iters)}\n")
+        f.write(f"config.hier_theta={float(args.hier_theta)}\n")
+        f.write(f"config.structure_max_trials={int(args.structure_max_trials)}\n")
         f.write(f"config.noc_bandwidth={stage_cfg.noc_bandwidth}\n")
         f.write(f"config.dram_bandwidth={stage_cfg.dram_bandwidth}\n")
         f.write(f"config.noc_energy_per_unit={stage_cfg.noc_energy_per_unit}\n")
@@ -329,4 +365,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
