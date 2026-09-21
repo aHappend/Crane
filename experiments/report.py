@@ -93,7 +93,7 @@ def make_figures(inference,training,out):
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    plt.rcParams.update({'font.size':10,'axes.spines.top':False,'axes.spines.right':False,'svg.fonttype':'none'})
+    plt.rcParams.update({'font.size':10,'axes.spines.top':False,'axes.spines.right':False,'svg.fonttype':'none','svg.hashsalt':'crane-reproduction'})
     colors=['#147d73','#e5b24a','#476eae']
     grouped={}
     for row in inference:
@@ -129,6 +129,8 @@ def make_figures(inference,training,out):
     fig.suptitle('Uniform-cohort training reference · batch 256 · 2 tiles',x=.01,ha='left',fontweight='bold')
     fig.savefig(out/'training_memory.svg',metadata={'Date':None});fig.savefig(out/'training_memory.png',dpi=170)
     plt.close(fig)
+    for path in out.glob('*.svg'):
+        path.write_text('\n'.join(line.rstrip() for line in path.read_text().splitlines())+'\n')
 
 
 def main():
@@ -146,7 +148,7 @@ def main():
     make_figures(inference,training,figures)
     fields=['model','mode','batch','tiles','dram_mb','status','latency_seconds','energy_joules','edp_joule_seconds','best_sub_batch','elapsed_seconds']
     with (out/'summary.csv').open('w',newline='') as stream:
-        writer=csv.DictWriter(stream,fieldnames=fields);writer.writeheader()
+        writer=csv.DictWriter(stream,fieldnames=fields,lineterminator="\n");writer.writeheader()
         for row in inference+training:
             data={k:row['case'].get(k,'') for k in fields}
             data.update({k:row.get('metrics',{}).get(k,'') for k in fields if k in row.get('metrics',{})})
@@ -156,7 +158,7 @@ def main():
              'training':[thin_result(x) for x in training],'native_set':native,
              'provenance':{'inference':im['environment'],'training':tm['environment']},
              'paper_doi':'10.1145/3725843.3756023'}
-    (out/'report.json').write_text(json.dumps(dataset,indent=2,allow_nan=False)+'\n')
+    (out/'report.json').write_text(json.dumps(dataset,separators=(',',':'),allow_nan=False)+'\n')
     template=Path(__file__).with_name('templates')/'demo.html'
     safe=json.dumps(dataset,separators=(',',':'),allow_nan=False).replace('<','\\u003c')
     args.demo.parent.mkdir(parents=True,exist_ok=True)
