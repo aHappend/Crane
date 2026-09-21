@@ -10,8 +10,9 @@
   proxy workload assumptions and remaining validation work.
 - Add an environment check that solves a small SCIP integer program, a synthetic
   quick start with JSON/HTML outputs, and a pinned dependency snapshot.
-- Add contributor guidance, issue/PR templates and a Linux/Windows CI template.
-  Activation is pending GitHub workflow permission; local checks are runnable.
+- Add contributor guidance, issue/PR templates and Linux/Windows CI.
+- Activate the CI workflow after the maintainer authorized workflow access;
+  run checks on pull requests and pushes to `main`, and upload quick-start reports.
 
 ### Correctness and execution fixes
 

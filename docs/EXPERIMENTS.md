@@ -3,9 +3,9 @@
 ## Installation
 
 Use Python 3.11–3.13 in a fresh virtual environment. The Linux and Windows CI
-matrix is prepared in [`.github/ci-template.yml`](../.github/ci-template.yml).
-The template is not active until a maintainer with workflow permission commits
-it as `.github/workflows/ci.yml`; the checks below can already be run locally.
+matrix is defined in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+The workflow runs on pull requests and pushes to `main`, and supports manual
+dispatch. The same checks can also be run locally with the commands below.
 
 ```bash
 python -m venv .venv

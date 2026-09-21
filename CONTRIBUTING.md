@@ -20,9 +20,9 @@ to reformat unrelated legacy files. Place automated tests under `tests/` and
 keep large experiment runs out of the default test suite.
 
 For dependency updates, regenerate the constraint snapshot in a clean environment,
-run the checks and quick start, and verify the Python/platform matrix when CI
-is available. Until the CI template is activated, state which environments were
-actually tested. `pip freeze` from an unrelated working environment
+run the checks and quick start, and verify the CI Python/platform matrix before
+merging the new versions. State which environments were actually tested.
+`pip freeze` from an unrelated working environment
 is not a suitable dependency record.
 
 ## Useful contributions
