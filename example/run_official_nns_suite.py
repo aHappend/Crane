@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 from datetime import datetime
 from pathlib import Path
 import sys
@@ -7,6 +7,8 @@ _BOOTSTRAP_ROOT = Path(__file__).absolute().parents[1]
 if str(_BOOTSTRAP_ROOT) not in sys.path:
     sys.path.insert(0, str(_BOOTSTRAP_ROOT))
 
+
+from project_paths import project_root_from, repo_rel
 
 ROOT = project_root_from(__file__, 1)
 if str(ROOT) not in sys.path:
@@ -243,11 +245,11 @@ def run_one(name, spec):
 
 def main():
     specs = official_specs()
-    out_dir = ROOT / "outputs" / "runs"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    out_dir = ROOT / "outputs" / "experiments" / f"official_nns_suite_{ts}"
+    out_dir.mkdir(parents=True, exist_ok=False)
 
-    detail_dir = out_dir / f"official_nns_details_{ts}"
+    detail_dir = out_dir / "details"
     detail_dir.mkdir(parents=True, exist_ok=True)
 
     rows = []
@@ -350,8 +352,8 @@ def main():
             }
         )
 
-    csv_file = out_dir / f"official_nns_suite_{ts}.csv"
-    txt_file = out_dir / f"official_nns_suite_{ts}.txt"
+    csv_file = out_dir / "summary.csv"
+    txt_file = out_dir / "summary.txt"
 
     fields = [
         "network", "source_ref", "batch_size", "best_sub_batch", "num_blocks", "num_states", "state_order",
@@ -388,7 +390,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 

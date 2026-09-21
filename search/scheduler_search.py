@@ -721,6 +721,13 @@ def _derive_recursive_intra_block_traces(
         child_deps = _derive_or_default_dependencies(children)
         block_slug = f"{bi:02d}_{block.name}"
         child_path = "root/" + "/".join([*lineage, block_slug]) if lineage else f"root/{block_slug}"
+        child_num_states = child_cfg.num_states or (2 * len(children) - 1)
+        child_lb, child_ub = _derive_child_completion_bounds_from_parent(
+            parent_result,
+            parent_block_index=bi,
+            child_num_states=child_num_states,
+            child_num_blocks=len(children),
+        )
 
         try:
             child_res = _flat_search_prepared(
@@ -1943,7 +1950,6 @@ def search_schedule(
         hierarchy_notes=[],
         trace_path="root",
     )
-
 
 
 
