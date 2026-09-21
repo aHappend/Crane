@@ -8,3 +8,12 @@ __pycache__/
 *.pyd
 outputs/experiments/
 outputs/visualization/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+.env
+.DS_Store
