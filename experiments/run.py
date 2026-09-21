@@ -75,6 +75,8 @@ def execute_case(case: dict, out: Path) -> dict:
                        'elapsed_seconds':time.monotonic()-started})
         return result
     if case.get('mode','nested')=='flat':
+        if profile is not None:
+            raise ValueError('core profiles require nested or serial mode')
         result=search_schedule(blocks,cfg)
         search_details={'algorithm':'flat_canonical','unexpanded_blocks':len(blocks)}
     else:

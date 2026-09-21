@@ -1450,14 +1450,14 @@ def _reverse_dependencies_for_backward(
         bc = num_blocks - 1 - p
         if bp != bc:
             out.add((bp, bc))
-    if not out and num_blocks > 1:
-        return _default_linear_dependencies(num_blocks)
     return sorted(out)
 
 
 def _phase_payload(res: SearchResult) -> dict[str, object]:
     return {
         "best_sub_batch": int(res.best_sub_batch),
+        "initial_counts": list(res.sct.initial_counts or [0]*res.sct.num_blocks),
+        "solver_reports": res.solver_reports,
         "scheduled_blocks": list(res.scheduled_blocks),
         "block_dependencies": list(res.block_dependencies),
         "state_order": list(res.state_order),
@@ -1887,27 +1887,12 @@ def search_schedule(
     if bool(config.enable_training_recomputation):
         return _search_training_with_recomputation(blocks=blocks, config=config)
 
-    use_hier = bool(config.enable_hierarchical_pipeline) and int(config.max_hierarchy_depth) > 1
-    if use_hier:
-        return _hierarchical_search(
-            blocks=blocks,
-            config=config,
-            depth=max(1, int(config.max_hierarchy_depth)),
-            lineage=[],
-        )
+    if (config.enable_hierarchical_pipeline or config.derive_recursive_traces) and config.max_hierarchy_depth > 1:
+        from search.nested_search import NestedSearch
+        prepared, _ = _prepare_blocks_and_dependencies(blocks, config)
+        return NestedSearch(depth=config.max_hierarchy_depth).run(prepared, config)
 
     work_blocks, block_deps = _prepare_blocks_and_dependencies(blocks, config)
-    use_joint = bool(config.derive_recursive_traces) and int(config.max_hierarchy_depth) > 1
-    if use_joint:
-        return _recursive_joint_optimize_prepared(
-            work_blocks=work_blocks,
-            block_deps=block_deps,
-            config=config,
-            depth_remaining=max(1, int(config.max_hierarchy_depth)),
-            hierarchy_level=0,
-            hierarchy_notes=[],
-            trace_path="root",
-        )
     return _flat_search_prepared(
         work_blocks=work_blocks,
         block_deps=block_deps,

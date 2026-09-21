@@ -49,6 +49,8 @@ class NestedSearch:
         if len(children) <= 1 or depth <= 1:
             if block.layer_count() > 1:
                 self.unexpanded.add(block.name)
+                if self.core_profile is not None:
+                    raise RuntimeError("SET profile requires full expansion to individual layers; increase depth")
             if self.core_profile is not None and block.layer_count() == 1:
                 layer = next(block.iter_layers())
                 latency, energy = self.core_profile.evaluate(layer, sub_batch, tiles)

@@ -37,3 +37,13 @@ def test_single_sample_uses_a_feasible_serial_micro_schedule():
     assert np.all(result.sct.table[-1]==1)
     assert all(len(active)==1 for active in result.state_active_blocks)
     assert result.total_edp==pytest.approx(result.total_latency*result.total_energy)
+
+
+def test_fully_expanded_hierarchy_conserves_leaf_work_without_double_billing():
+    blocks,cfg=build_demo()
+    layers=[next(b.iter_layers()) for b in blocks]
+    cfg=replace(cfg,batch_size=8,candidate_sub_batches=[1,2,4],num_pes=1,
+                noc_energy_per_unit=0,dram_energy_per_unit=0,canonical_fastpath=True)
+    result=NestedSearch(depth=5).run(balanced_blocks(layers,2),cfg)
+    expected=sum(layer.flops for layer in layers)*cfg.batch_size*cfg.compute_energy_per_op
+    assert result.total_energy==pytest.approx(expected,rel=1e-8)

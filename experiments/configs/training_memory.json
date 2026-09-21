@@ -1,0 +1,55 @@
+{
+  "suite": "capacity_bounded_training_reference",
+  "defaults": {
+    "mode": "training",
+    "tiles": 2,
+    "batch": 256,
+    "sub_batches": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32
+    ],
+    "timeout_seconds": 60
+  },
+  "cases": [
+    {
+      "model": "resnet50",
+      "dram_mb": 64
+    },
+    {
+      "model": "resnet50",
+      "dram_mb": 256
+    },
+    {
+      "model": "resnet50",
+      "dram_mb": 32768
+    },
+    {
+      "model": "resnet101",
+      "dram_mb": 64
+    },
+    {
+      "model": "resnet101",
+      "dram_mb": 256
+    },
+    {
+      "model": "resnet101",
+      "dram_mb": 32768
+    },
+    {
+      "model": "googlenet",
+      "dram_mb": 64
+    },
+    {
+      "model": "googlenet",
+      "dram_mb": 256
+    },
+    {
+      "model": "googlenet",
+      "dram_mb": 32768
+    }
+  ]
+}
