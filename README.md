@@ -1,5 +1,6 @@
 # Crane · Python Reproduction
 
+[![CI](https://github.com/aHappend/Crane/actions/workflows/ci.yml/badge.svg)](https://github.com/aHappend/Crane/actions/workflows/ci.yml)
 [![Python 3.11–3.13](https://img.shields.io/badge/python-3.11%E2%80%933.13-blue)](docs/EXPERIMENTS.md)
 [![Paper · MICRO 2025](https://img.shields.io/badge/paper-MICRO%202025-b31b1b)](https://doi.org/10.1145/3725843.3756023)
 
@@ -153,10 +154,11 @@ python -m ruff check .
 python -m pytest -q
 ```
 
-The [CI template](.github/ci-template.yml) covers Linux on Python 3.11 / 3.13
+The [CI workflow](.github/workflows/ci.yml) covers Linux on Python 3.11 / 3.13
 and Windows on Python 3.11, runs SCIP, tests schedule invariants and example
-entrypoints, and uploads a quick-start report. It is not active yet: committing
-it as `.github/workflows/ci.yml` requires GitHub workflow permission. Tests intentionally live in `tests/`; the older `example/*_test.py`
+entrypoints, and uploads a quick-start report. It runs on pull requests and
+pushes to `main`, and can also be started manually. Tests intentionally live in
+`tests/`; the older `example/*_test.py`
 files are experiment scripts.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for reporting bugs and submitting changes,

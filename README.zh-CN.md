@@ -1,5 +1,6 @@
 # Crane · Python 复现
 
+[![CI](https://github.com/aHappend/Crane/actions/workflows/ci.yml/badge.svg)](https://github.com/aHappend/Crane/actions/workflows/ci.yml)
 [![Python 3.11–3.13](https://img.shields.io/badge/python-3.11%E2%80%933.13-blue)](docs/EXPERIMENTS.md)
 [![Paper · MICRO 2025](https://img.shields.io/badge/paper-MICRO%202025-b31b1b)](https://doi.org/10.1145/3725843.3756023)
 
@@ -130,9 +131,9 @@ python -m ruff check .
 python -m pytest -q
 ```
 
-[CI 模板](.github/ci-template.yml)覆盖 Linux 的 Python 3.11 / 3.13 和 Windows 的 Python 3.11，
-检查 SCIP、调度约束、实验入口，并上传入门示例报告。目前模板尚未启用；将其提交为
-`.github/workflows/ci.yml` 需要 GitHub 的工作流权限。自动测试统一在 `tests/`；`example/*_test.py` 是历史实验脚本。
+[CI 工作流](.github/workflows/ci.yml)覆盖 Linux 的 Python 3.11 / 3.13 和 Windows 的 Python 3.11，
+检查 SCIP、调度约束、实验入口，并上传入门示例报告。每次提交 PR 或推送到 `main` 时自动运行，
+也支持手动触发。自动测试统一在 `tests/`；`example/*_test.py` 是历史实验脚本。
 
 贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，后续复现里程碑见
 [待完成工作](docs/REPRODUCTION.md#remaining-work)。
