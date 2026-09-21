@@ -1,50 +1,46 @@
-# Crane · Python 复现
+# Crane · 复现与调度实验平台
 
 [![CI](https://github.com/aHappend/Crane/actions/workflows/ci.yml/badge.svg)](https://github.com/aHappend/Crane/actions/workflows/ci.yml)
 [![Python 3.11–3.13](https://img.shields.io/badge/python-3.11%E2%80%933.13-blue)](docs/EXPERIMENTS.md)
-[![Paper · MICRO 2025](https://img.shields.io/badge/paper-MICRO%202025-b31b1b)](https://doi.org/10.1145/3725843.3756023)
 
-**使用 Python 独立复现 Crane 论文中的调度流程，研究分块加速器上的 DNN 推理、训练与层间调度。**
+**用 Python 独立实现 Crane 的层间调度方法，并提供真实网络、数学检查、可重复实验和交互式结果演示。**
 
 [English](README.md) · [简体中文](README.zh-CN.md) ·
-[实验指南](docs/EXPERIMENTS.md) · [复现范围](docs/REPRODUCTION.md)
+[实验结果](experiments/results/reproduction_20260921/REPORT.md) ·
+[复现范围](docs/REPRODUCTION.md) · [数学检查](docs/MATHEMATICAL_AUDIT.md)
 
-> **当前状态：研究原型。** 核心调度流程已实现，并通过小规模示例和测试验证。
-> 现有网络实验使用代理工作负载数据。本项目是独立复现，论文原实现使用 C++；
-> 本仓库尚未证明复现了论文报告的性能加速比或能量延迟积（EDP）结果。
+> 当前已具备完整的实验运行与证据保存流程。推理实验使用真实网络定义和原版 SET 的层内成本配置；
+> 训练提供经过样本覆盖及容量检查的统一 cohort 参考策略，另保留实验性的 MILP 路径。
+> 完整的布局/通信成本校准、论文全部图表与性能加速比，仍未被证明复现。
 
-## 对应论文
+## 对应论文，以及与 SET 的关系
 
 **Crane: Inter-Layer Scheduling Framework for DNN Inference and Training Co-Support on Tiled Architecture**
 
 Yu Gong、Lingyi Huang、Haodong Chang、Rongjian Liang、Cheng Yang、Zhexiang Tang、Jiang Hu、Bo Yuan。
-
 **MICRO 2025，1250–1263 页。**
 
-[论文 DOI / 出版页面](https://doi.org/10.1145/3725843.3756023) ·
-[论文 PDF](include/crane_paper.pdf) · [引用信息](CITATION.cff)
+[论文 DOI](https://doi.org/10.1145/3725843.3756023) · [论文 PDF](include/crane_paper.pdf) · [引用信息](CITATION.cff)
 
-论文研究的核心问题是：如何在多个计算 tile 之间安排神经网络各层的执行、数据保留和传输，
-并共同考虑层融合、batch 拆分以及训练中的重计算。Crane 使用分层 block 和表格表示这些决策，
-再通过优化搜索调度方案。本仓库用 NumPy 和 OR-Tools 的 SCIP 后端实现相关实验流程。
+SET 是 ISCA 2023 的另一套层间调度框架。Crane 论文用它校验成本模型，并将其作为推理对比基线。
+本仓库从固定版本的 SET 导出真实网络定义和层内映射成本，同时单独运行原版 SET 搜索作为参考。
+Python Crane 调度器是独立实现；原论文实现使用 C++。
 
-## 仓库能做什么
+## 本轮复现更新
 
-- 描述层级 DAG、层间依赖和分层 block，并进行链式 block 合并。
-- 枚举子 batch，求解 **ScT（调度表）** 与 **MeT（SRAM / DRAM 内存表）**。
-- 估算计算与访存的延迟、能耗和 EDP，选择候选调度方案。
-- 探索递归调度、block 结构细化，以及训练的 **FW / BW1 / BW2** 阶段。
-- 根据实验入口输出 JSON、文本、CSV 或可在浏览器中查看的 HTML 调度报告。
-
-整体流程为：**层图与工作量 → block 与依赖 → 子 batch 候选 → ScT → MeT → 成本评估 → 调度报告**。
-分层搜索可进一步反馈和细化 block 结构。
-
-这里运行的是调度模型和成本估算；不需要实际执行神经网络、训练模型权重或使用 GPU。
+- **真实网络：** 编译原始 C++ 网络对象，导出 16 个网络的形状、工作量和依赖。
+  ResNet-50 为 72 个节点、87 条边；Transformer 为 471 个节点、661 条边，保留残差、分支及动态权重依赖。
+- **调度数学：** 修正子 batch 工作量缩放、多父节点数据需求和样本区间统计。
+  对固定成本的 ScT，提供精确整数乘积 MILP，以及适用条件下等价的顶点枚举化简。
+- **分层执行：** 子调用恰好处理一个父子 batch，使用实际分配的 tile 和明确的内存预算。
+  不再通过不相关状态索引的重采样和放松边界来拼接默认分层结果。
+- **成本参考：** 随仓库提供 ResNet-50、VGG-19、GoogLeNet、Transformer cell 的原版 SET 层内成本配置。
+- **训练参考：** 显式记录 FW、BW1、重计算与 BW2 的样本区间，验证每个样本完成一次反向计算及容量约束。
+- **实验与演示：** 一键实验矩阵、进程时限、原始结果、来源哈希、科学绘图和离线交互 demo。
 
 ## 快速开始
 
-使用 **Python 3.11–3.13**。以下示例不需要数据集、GPU、外部求解服务或商业求解器许可证。
-在仓库根目录执行：
+使用 Python 3.11–3.13，在仓库根目录执行：
 
 ```bash
 git clone https://github.com/aHappend/Crane.git
@@ -52,19 +48,8 @@ cd Crane
 python -m venv .venv
 ```
 
-Linux / macOS 激活环境：
-
-```bash
-source .venv/bin/activate
-```
-
-Windows PowerShell 激活环境：
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-安装记录的依赖版本，检查环境并运行小型示例：
+Linux/macOS 使用 `source .venv/bin/activate` 激活环境；Windows PowerShell 使用
+`.\.venv\Scripts\Activate.ps1`。然后运行：
 
 ```bash
 python -m pip install -r requirements.txt -c constraints.txt
@@ -72,58 +57,70 @@ python tools/doctor.py
 python example/quickstart.py
 ```
 
-入门示例是一个**人工构造的三层链**，实际调用 ScT 和 MeT 的 SCIP 求解器，关闭启发式 fallback。
-终端会显示选中的子 batch、求解器名称和估算指标，并生成：
+入门示例用一个小型人工网络调用真实 SCIP 求解器，输出 JSON 和 HTML 调度报告。
+这些是调度与成本模型实验，不需要 GPU、训练权重或下载数据集。
 
-```text
-outputs/experiments/quickstart_<时间戳>/
-├── summary.json     # 工作负载、完整配置、依赖版本、Git 版本和结果
-└── schedule.html    # 各状态、累计 ScT 和内存表
+## 交互式 demo
+
+克隆后直接用浏览器打开 **[docs/demo/index.html](docs/demo/index.html)**，无需联网或启动服务。
+也可以运行：
+
+```bash
+python -m http.server 8000 --bind 127.0.0.1 --directory docs/demo
 ```
 
-用浏览器打开 `schedule.html`。正常运行时两个求解器均显示为 `ortools-scip`。
-这一步证明基本流程可运行；其中的估算值不代表论文实验结果。
-不同求解器版本可能在多个同等目标值的方案中选出不同的调度表。
+在运行该命令的电脑打开 `http://127.0.0.1:8000`。如果代码在 SSH 服务器上，
+可在自己的电脑运行 `ssh -L 8000:127.0.0.1:8000 <服务器别名>` 后访问同一地址。
 
-可用 `--output-dir <新目录>` 指定输出位置。为保留已有实验，输出目录必须尚不存在。
+Demo 可以选择已保存的网络、batch 和调度方案，播放 ScT 状态、查看 SRAM/DRAM 占用，
+切换训练内存实验和 SET 固定种子结果。控件筛选的是已有记录，不会在浏览器中启动新的求解。
 
-## 实验入口与适用范围
+![调度实验平台预览](docs/demo/preview.png)
 
-| 入口 | 用途 | 数据及解释 |
-| --- | --- | --- |
-| `example/quickstart.py` | 检查环境、理解完整流程 | 三层人工工作负载 |
-| `example/run_official_nns_suite.py` | 比较 12 个网络家族的代理模型，启用 block 合并 | 手工填写的工作量，与 SET 网络定义关联 |
-| `example/run_official_nns_layer_level.py` | 对同一批代理模型按节点调度，关闭合并 | 一个代理节点对应一个 block，并非自动导入完整网络 |
-| `example/compare_transformer_granularity.py` | 比较 stage / layer 粒度，可选论文 §7.2 硬件配置 | 手工展开的 471 节点 Transformer 链和代理成本 |
-| `example/run_transformer_training_repro.py` | 探索 FW / BW1 / BW2 和 §7.3 风格硬件配置 | 代理工作量，反向与重计算成本由缩放参数构造 |
+## 已运行的实验
 
-详细命令、配置、输出解释及排错见 [实验指南](docs/EXPERIMENTS.md)。
-471 节点 Transformer 等大型实验可能耗时较长，多数 MILP 没有求解时限。
+[完整报告](experiments/results/reproduction_20260921/REPORT.md)包含：
 
-`official_nns` 和 `strict_paper_mode` 是保留的历史名称，不能据此认定已经精确导入原网络、
-严格等价实现全部数学模型或复现论文数值。[复现范围文档](docs/REPRODUCTION.md)逐项列出了论文到代码的对应关系、
-已知近似和验证缺口，尤其说明了 EDP 目标的松弛处理、代理工作负载和分析式硬件成本模型。
+- **10 组推理对照：** 分层方案与串行参考使用相同的 SET 层内配置和分析式通信模型。
+- **9 组训练容量配置：** 7 组可行，2 组在当前统一 cohort 策略下不可行。
+- **12 次原版 SET：** 四个网络，每个网络三个固定随机种子，记录完整参数和原始输出。
+
+![EDP 对比](experiments/results/reproduction_20260921/figures/edp_comparison.svg)
+
+图中是 batch 64、16 tiles 下，相对于同成本模型串行参考的 EDP。
+VGG-19 的分层结果略差，这个负面结果也被保留。原版 SET 使用更完整的布局与通信评估器，
+因此单独报告，不能把两种外层成本模型的比值直接称为论文加速比。
+
+重新运行实验：
+
+```bash
+python -m experiments.run --config experiments/configs/native_core_inference.json --output-dir outputs/experiments/my-inference
+python -m experiments.run --config experiments/configs/training_memory.json --output-dir outputs/experiments/my-training
+```
+
+这些命令直接读取已保存的层内成本配置，不需要 C++ 编译器。
+每个任务有独立时限，记录配置、代码版本、依赖、求解状态、验证结果和完整调度表。
+数据导出、原版 SET 构建、绘图和排错步骤见 [实验指南](docs/EXPERIMENTS.md)。
 
 ## 代码导航
 
-| 目录 | 职责 |
+| 目录 | 内容 |
 | --- | --- |
-| `model/` | 层节点、DAG 解析与拓扑排序 |
-| `scheduler/` | block、ScT / MeT 求解器、硬件参数 |
-| `search/` | 候选搜索、分层优化、训练阶段组织 |
-| `cost_model/` | 延迟与能耗计算 |
-| `example/` | 实验入口、入门示例和 HTML 报告 |
-| `tests/` | 回归测试与真实求解器集成测试 |
-| `tools/` | 环境检查和维护工具 |
-| `src/nns/`、`include/` | SET 网络参考定义、头文件和论文 |
-| `docs/` | 架构、实验与复现边界文档 |
-| `outputs/` | 历史参考资料，以及被 Git 忽略的新实验输出 |
+| `workloads/` | 真实网络元数据、加载器与初始分层 |
+| `model/` | 层节点与 DAG 校验 |
+| `scheduler/` | ScT/MeT、目标函数、流量区间、硬件参数 |
+| `search/` | 平面搜索、父子 sub-batch 组合及训练策略 |
+| `cost_model/` | 分析式模型、原版 SET 成本配置适配器 |
+| `experiments/` | 实验配置、运行器、参考成本、原始证据与报告 |
+| `tools/` | 环境检查和固定版本的上游导出/基线工具 |
+| `example/` | 入门示例与保留的历史探索脚本 |
+| `docs/demo/` | 可离线打开的交互演示 |
 
-修改实现前建议阅读 [架构与单位说明](docs/ARCHITECTURE.md)。
-新实验写入 `outputs/experiments/`；历史 `outputs/runs/` 仅作为存档保留。
-历史结果早于本次工作量重复统计修复，不能当作当前版本的数值基线，具体见 [变更记录](CHANGELOG.md)。
+旧 `official_nns` 示例仍使用历史代理数据。新的真实网络实验统一从 `experiments/` 入口运行。
+修改算法前，建议阅读 [架构](docs/ARCHITECTURE.md)、[数学检查](docs/MATHEMATICAL_AUDIT.md)
+及 [复现边界](docs/REPRODUCTION.md)。
 
-## 开发和验证
+## 开发、引用与归属
 
 ```bash
 python -m pip install -r requirements-dev.txt -c constraints.txt
@@ -131,18 +128,10 @@ python -m ruff check .
 python -m pytest -q
 ```
 
-[CI 工作流](.github/workflows/ci.yml)覆盖 Linux 的 Python 3.11 / 3.13 和 Windows 的 Python 3.11，
-检查 SCIP、调度约束、实验入口，并上传入门示例报告。每次提交 PR 或推送到 `main` 时自动运行，
-也支持手动触发。自动测试统一在 `tests/`；`example/*_test.py` 是历史实验脚本。
+CI 覆盖 Linux/Python 3.11、3.13 和 Windows/Python 3.11。大型实验单独运行并记录预算。
+研究方法引用 Crane 原论文；使用 SET 网络、层内成本或基线时，同时引用
+[Cai 等，ISCA 2023](https://doi.org/10.1145/3579371.3589048)。使用本实现时记录 Git commit 和实验 manifest。
 
-贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，后续复现里程碑见
-[待完成工作](docs/REPRODUCTION.md#remaining-work)。
-
-## 引用与来源
-
-研究方法请引用 Crane 原论文，BibTeX 见 [英文 README](README.md#citation-and-attribution)。
-使用本仓库实现时，请同时记录 `aHappend/Crane`、具体 Git commit 和依赖环境。
-本仓库复现代码、Crane 论文和 SET 参考资料的作者归属分别记录。
-
-当前仓库尚未声明统一的软件许可证；论文及第三方文件的来源和各自许可状态见
+贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，变更见 [CHANGELOG.md](CHANGELOG.md)。
+本仓库尚未声明统一的软件许可证；第三方资料的归属与许可状态见
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

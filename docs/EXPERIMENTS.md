@@ -1,154 +1,170 @@
-# Running and interpreting experiments
+# Running the reproduction experiments
 
-## Installation
+## Install and check the environment
 
-Use Python 3.11–3.13 in a fresh virtual environment. The Linux and Windows CI
-matrix is defined in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
-The workflow runs on pull requests and pushes to `main`, and supports manual
-dispatch. The same checks can also be run locally with the commands below.
+Use Python 3.11–3.13 and run commands from the repository root:
 
 ```bash
 python -m venv .venv
 ```
 
 Activate with `source .venv/bin/activate` on Linux/macOS or
-`.\.venv\Scripts\Activate.ps1` in Windows PowerShell, then run:
+`.\.venv\Scripts\Activate.ps1` in Windows PowerShell. Then:
 
 ```bash
 python -m pip install -r requirements.txt -c constraints.txt
 python -m pip check
 python tools/doctor.py
-```
-
-`requirements.txt` lists dependencies; `constraints.txt` records the tested
-versions, including transitive and development dependencies. Constraints limit
-versions but do not cause development tools to be installed by themselves.
-SCIP comes through OR-Tools; no separate Gurobi installation is used. `pypdf`
-supports working with the bundled paper and is not part of the solver loop.
-
-For PowerShell environments that restrict activation, call
-`.\.venv\Scripts\python.exe` directly instead of changing system policy.
-
-## 1. First run: a small schedule
-
-```bash
 python example/quickstart.py
 ```
 
-This uses a synthetic three-layer chain, batch size 8, sub-batch candidates
-`[1, 2, 4]`, 16 modeled tiles, a §7.2-style hardware profile, and a flat search.
-Both table solvers must be `ortools-scip`. It produces a fresh directory under
-`outputs/experiments/` with `summary.json` and `schedule.html`.
+The core runtime and recorded cost profiles do not require a C++ compiler,
+GPU, trained weights, dataset download or commercial solver service.
+On PowerShell you can call `.\.venv\Scripts\python.exe` directly if activation
+is restricted.
 
-For a chosen location (the directory must not already exist):
+## Explore the saved demo
 
-```bash
-python example/quickstart.py --output-dir outputs/experiments/my-first-run
-```
+Open `docs/demo/index.html` directly in a browser. It embeds the saved results
+and needs no internet access. It supports model/mode filters, state playback,
+activation-storage inspection, training memory outcomes and seeded SET summaries.
+The controls select existing records; they do not submit live solver jobs.
 
-The JSON includes the complete configuration, synthetic workload, Python /
-NumPy / OR-Tools versions, Git commit and dirty flag, solver names, tables and
-metrics with units. HTML can be opened directly in a browser. No download of
-weights or data is involved.
-
-## 2. Network-family proxy suites
+For HTTP preview:
 
 ```bash
-python example/run_official_nns_suite.py
-python example/run_official_nns_layer_level.py
+python -m http.server 8000 --bind 127.0.0.1 --directory docs/demo
 ```
 
-Each entrypoint runs 12 hand-authored network-family proxies. The first merges
-linear blocks; the second keeps each proxy node as a block. The workload
-definitions live in `official_specs()`, not in a C++ parser. These runs are useful
-for exploring scheduling behavior; they are not paper-scale accuracy checks.
+If this runs on an SSH server, use `ssh -L 8000:127.0.0.1:8000 <your-host>` from
+your computer and browse `http://127.0.0.1:8000` there.
 
-Each writes `summary.txt`, `summary.csv` and a `details/` directory into its own
-timestamped `outputs/experiments/official_nns_*` directory. Per-network details
-include solver names and table values. Older revisions of the merged suite
-wrote to `outputs/runs/`; those files remain archived.
+## Rerun the recorded inference and training suites
 
-## 3. Transformer granularity and hierarchy
-
-Inspect the available options first:
+Choose new output directories; existing directories are refused:
 
 ```bash
-python example/compare_transformer_granularity.py --help
+python -m experiments.run --config experiments/configs/native_core_inference.json --output-dir outputs/experiments/my-inference
+python -m experiments.run --config experiments/configs/training_memory.json --output-dir outputs/experiments/my-training
 ```
 
-An inference-oriented comparison using the §7.2 hardware helper and paper-style
-K1/K2 ratios can be launched with:
+The inference matrix has 10 cases using real ResNet-50, VGG-19, GoogLeNet and SET
+Transformer-cell graphs. Nested and serial modes share the same recorded Polar
+core mappings. The search uses the explicitly listed sub-batch candidates and a
+fixed initial hierarchy; it is not an exhaustive whole-network optimum.
 
-```bash
-python example/compare_transformer_granularity.py --num-pes 16 --paper-hw-7-2 --top-k1-ratio 0.5 --top-k2-ratio 0.2 --verbose-progress
-```
+The training matrix has 9 cases with batch 256, two tiles and DRAM capacities of
+64, 256 and 32768 MB. Its serial uniform-cohort policy produces seven feasible
+outcomes and two policy-specific infeasibilities. Expected infeasible cases are
+explicitly marked in the config. Unexpected errors, timeouts or mismatched
+outcomes make the suite exit nonzero.
 
-Add `--hierarchical --hier-depth 2 --hier-iters 2 --hier-theta 0.02` to enable
-structure refinement. `--all-sub-batch-factors` expands the candidate set.
-This script uses a manually expanded 471-node chain; matching hardware settings
-does not make that workload equivalent to the paper's Transformer-Large model.
+The reference machine completed individual nested inference cases in roughly
+6–38 seconds and serial cases in roughly 0.1–1.2 seconds. These are observations
+from the recorded environment, not runtime guarantees.
 
-Other retained entrypoints:
+### Configuration
 
-| Script | Role |
+A suite JSON contains `defaults` and an explicit `cases` list. Important fields:
+
+| Field | Meaning |
 | --- | --- |
-| `run_transformer_min_layer_block_experiment.py` | Compare merge sizes on the 471-node chain; configuration is in `run_candidate()` |
-| `compare_transformer_stage_layer_with_merge.py` | Stage/layer comparison with merging and optional hierarchical settings |
-| `compare_all_networks_stage_vs_layer.py` | Proxy-family granularity comparison with per-run `--timeout-sec` |
-| `compare_all_networks_same_source_merge.py` | Proxy-family granularity/merge comparison with `--timeout-sec` and optional hardware/hierarchy settings |
-| `resnet50_test.py`, `advanced_networks_test.py` | Older synthetic scheduling demonstrations; these are not unit tests |
+| `model` | A name from `workloads.set_models.available_models()` |
+| `mode` | `nested`, `serial`, `flat` or the checked `training` reference |
+| `batch`, `sub_batches`, `tiles` | Total samples, enumerated factors and tile count |
+| `fanout`, `depth` | Initial containment fanout and maximum expansion depth |
+| `core_profile` | Recorded SET profile directory; nested/serial inference only |
+| `solver_seconds` | Per-SCIP-call limit |
+| `timeout_seconds` | Hard deadline for the entire isolated case process |
+| `sram_mb`, `dram_mb` | Explicit memory overrides |
+| `expected_status` | `completed` by default; documented negative cases use `infeasible` |
 
-The large experiments are exploratory entrypoints. The test suite validates their imports
-and applicable help commands, not a full run of every large configuration.
-Most MILPs have no solver time limit; the comparison scripts' timeout options
-are process-level limits specific to those scripts.
+A profile must cover the requested network, batch factors and tile counts.
+Missing or mismatched profiles fail explicitly. Full profile-based runs require
+all composite blocks to expand to individual layers.
 
-## 4. Training scheduling and recomputation
+Each case writes `case.json`, `result.json`, `run.log`, and, for inference,
+`hierarchy.json`, `candidate_failures.json` and `schedule.html`. The suite manifest
+records hashes and environments. Inference table occupancy is scoped to top-level
+boundary buffers; child budgets are in hierarchy records.
+
+## Regenerate real networks and native core profiles
+
+These optional steps require Linux, Git, Make and a C++17 compiler. The Python
+runtime can use the checked-in exports without them.
 
 ```bash
-python example/run_transformer_training_repro.py --help
-python example/run_transformer_training_repro.py --num-pes 2 --batch-size 128 --candidate-sub-batches 4,8,16,32 --verbose-progress
+git clone https://github.com/SET-Scheduling-Project/SET-ISCA2023.git /tmp/set-reference
+git -C /tmp/set-reference checkout a7bd73912f58d9fea10fadab693eebd4e6e3054d
+python tools/import_set_networks.py --set-root /tmp/set-reference --out outputs/experiments/set_networks.json
+python tools/profile_set_core.py --set-root /tmp/set-reference --network resnet --max-batch 64 --max-tiles 16 --output-dir outputs/experiments/my-resnet-profile
 ```
 
-The default uses §7.3-style hardware settings, a 32768 MB DRAM capacity and the
-synthetic Transformer workload. Results are scheduling estimates for the
-FW / BW1 / BW2 phases; no model is trained. This 471-node experiment can be
-expensive. The test suite uses a separate two-block training case for a fast
-check of the phase plumbing.
+The tools require the pinned, unmodified upstream source. The network exporter
+uses compiled objects instead of regex-parsing or inventing graph metadata.
+The core exporter calls the original Polar mapper for each layer/batch/tile
+combination. Its manifest documents included and excluded cost terms.
 
-Outputs include `summary.txt`, phase rows in `summary.csv`, and
-`fw_detail.txt` / `bw1_detail.txt` / `bw2_detail.txt` with corresponding HTML
-schedules. Total training EDP is `(sum phase latency) × (sum phase energy)`,
-not the sum of phase EDP values.
+## Run the actual SET baseline
 
-## Reading and preserving results
+```bash
+python tools/run_set_baseline.py --set-root /tmp/set-reference --network resnet --batch 64 --mesh 4 --rounds 20 --seed 7 --timeout 180 --output-dir outputs/experiments/my-set-run
+python -m experiments.native_set_suite --set-root /tmp/set-reference --rounds 20 --seeds 7,19,43 --output-dir outputs/experiments/my-set-suite
+```
 
-ScT entries are cumulative completed sub-batch counts. MeT entries are cutoff
-indices; they are not MB occupancy. See [architecture and units](ARCHITECTURE.md).
-Always record whether the run uses normalized hardware or a paper hardware
-helper. Legacy text output rounds many values to six decimal places; prefer
-full-precision numeric records for quantitative comparisons.
+The suite runs four networks over three fixed seeds. Each native search uses four
+internal SA trials and the requested rounds per layer. A temporary source copy
+replaces only the clock-derived random seed; the patch, generated-source hashes,
+arguments, native summaries and logs are preserved. The checkout is unmodified.
+Compilation is excluded from the recorded search wall time.
 
-The quick start records a manifest automatically. Older experiment scripts have
-different output schemas and do not all record the full environment. Preserve
-the command, commit, dirty diff if any, complete config, dependency versions,
-source workload and raw outputs alongside any result you intend to compare.
+Native SET's outer placement/traffic evaluator differs from Python's analytical
+one. Report raw values and budgets; do not treat their ratio as a reproduced
+paper speedup without a matched-evaluator calibration.
 
-Generated experiments are ignored by Git. Share selected outputs as CI artifacts
-or a documented benchmark artifact, with their configuration and provenance.
-Keep historical runs separate from results regenerated after code changes.
+## Rebuild figures and demo
 
-## Troubleshooting
+Install the recorded plotting environment:
 
-| Symptom | Action |
-| --- | --- |
-| Missing `numpy` / `ortools`, or import error | Check the active Python executable and install with the same `python -m pip` command. Do not reuse a checked-out virtual environment. |
-| `OR-Tools SCIP solver is not available` | Run `tools/doctor.py`; use the pinned OR-Tools wheel on a supported Python/platform. |
-| `No feasible ScT candidate found` | Enable verbose progress. Check batch divisibility, candidate sizes, active-state constraints and dependency settings. |
-| `No feasible MeT candidate found` | Inspect SRAM/DRAM capacity, output-volume units and candidate-specific errors. Do not silently enable fallback for a paper comparison. |
-| Long solve with little output | Run the quick start first; use progress options, fewer candidates or a script with a process timeout. |
-| Different schedules between environments | Compare solver and dependency versions, configs and objective values. Tied solutions can yield different tables. |
-| `FileExistsError` from quick start | Choose a new output directory; previous results are intentionally preserved. |
+```bash
+python -m pip install -r requirements-analysis.txt -c constraints-analysis.txt
+```
 
-For a bug report, include `python tools/doctor.py`, your command and commit, the
-smallest reproducing workload, and the relevant traceback or solver log.
+From fresh run directories:
+
+```bash
+python -m experiments.report --inference outputs/experiments/my-inference --training outputs/experiments/my-training --set-baselines outputs/experiments/my-set-suite --output-dir outputs/experiments/my-report --demo outputs/experiments/my-report/index.html
+```
+
+Or regenerate entirely from the checked-in raw evidence, without rerunning SET:
+
+```bash
+python -m experiments.report --inference experiments/results/reproduction_20260921/raw/inference --training experiments/results/reproduction_20260921/raw/training --set-baselines experiments/results/reproduction_20260921/raw/native_set --output-dir outputs/experiments/rebuilt-report --demo outputs/experiments/rebuilt-report/index.html
+```
+
+The generator verifies recorded result/workload hashes, accepts compressed raw
+JSON, and produces a CSV, report JSON, Markdown report, SVG/PNG figures and a
+self-contained HTML demo.
+
+## Tests and interpretation
+
+```bash
+python -m pip install -r requirements-dev.txt -c constraints.txt
+python -m ruff check .
+python -m pytest -q
+```
+
+Tests include independent integer/state enumeration, workload conservation,
+interval identity, real graph metadata, nested resource/batch composition,
+Figure-6 cohort accounting and experiment artifact generation. CI runs Linux
+and Windows checks; long matrices run separately with process deadlines.
+
+The old `example/official_nns*` names refer to historical proxy workloads. Other
+older example scripts, including the experimental MILP Transformer training
+entrypoint, remain available for comparison but are not the recorded evidence
+path described here. See [REPRODUCTION.md](REPRODUCTION.md) before extending claims.
+
+Common failures: use the same Python for pip and execution; run `tools/doctor.py`
+for SCIP availability; use valid batch factors; check memory/units and profile
+coverage; choose a fresh output directory. A time-limited feasible result is not
+an optimality certificate. Preserve the full manifest when reporting a problem.

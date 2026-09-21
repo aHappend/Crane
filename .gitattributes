@@ -1,0 +1,23 @@
+# Provenance hashes must survive Linux/Windows checkouts unchanged.
+* text=auto
+*.py text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.json text eol=lf
+*.csv text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.txt text eol=lf
+*.cff text eol=lf
+*.html text eol=lf
+*.svg text eol=lf
+*.gz binary
+*.png binary
+
+# Generated data stay inspectable but do not obscure source changes in reviews.
+workloads/set_networks.json linguist-generated=true
+experiments/reference_profiles/** linguist-generated=true
+experiments/results/** linguist-generated=true
+docs/demo/index.html linguist-generated=true
+docs/demo/preview.png linguist-generated=true

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
@@ -61,7 +61,7 @@ def _append_layer(chain: list[Layer], name: str) -> None:
 
 
 def build_transformer_min_layers() -> list[Block]:
-    """Expand official transformer.cpp into minimal basic layers (471 total)."""
+    """Build a handwritten 471-node chain proxy; use workloads.set_models for the real DAG."""
 
     layers: list[Layer] = []
 

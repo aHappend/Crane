@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 import time
@@ -8,11 +8,12 @@ from typing import Sequence
 
 from cost_model.energy_model import communication_energy, edp
 from cost_model.latency_model import noc_latency
-from scheduler.block import Block, derive_block_dependencies, merge_linear_blocks
+from scheduler.block import Block, derive_block_dependencies, derive_block_edge_volumes, merge_linear_blocks
 from scheduler.memory_table import MemoryOptimizationResult, MemoryTable, optimize_memory_table
 from scheduler.milp_solver import MilpSolution
 from scheduler.paper_milp import ScTOptimizationResult, optimize_sct_table
 from scheduler.scheduling_table import SchedulingTable
+from scheduler.traffic import estimate_traffic
 
 
 @dataclass
@@ -53,7 +54,10 @@ class SearchConfig:
     top_k2_ratio: float = 0.2
     use_all_sub_batch_factors: bool = False
     use_edp_objective: bool = True
-    dependency_gap: int = 0
+    dependency_gap: int = 1
+    solver_time_limit_s: float = 30.0
+    edp_method: str = "exact"
+    canonical_fastpath: bool = True
     allow_solver_fallback: bool = False
     latency_combine_mode: str = "max"
     verbose_progress: bool = False
@@ -108,6 +112,7 @@ class SearchResult:
     hierarchy_notes: list[str] = field(default_factory=list)
     hierarchy_traces: list[dict[str, object]] = field(default_factory=list)
     phase_results: dict[str, dict[str, object]] = field(default_factory=dict)
+    solver_reports: list[dict[str, object]] = field(default_factory=list)
 
 
 def _empty_state_block_override(
@@ -367,81 +372,10 @@ def _combine_total_latency(compute_latency: float, memory_latency: float, mode: 
     return float(max(compute_latency, memory_latency))
 
 
-def _estimate_dep_traffic(
-    sct: SchedulingTable,
-    met: MemoryTable,
-    block_volumes: Sequence[float],
-    block_dependencies: Sequence[tuple[int, int]],
-) -> tuple[float, float, float]:
-    """Estimate (Dep_C, Dep_S, Dep_D) in MB using ScT/MeT + dependencies.
-
-    This follows Eq.19/21 variable semantics at a coarse granularity:
-    - Dep_C: direct producer->consumer transfer in the same state
-    - Dep_S: transfer from SRAM-resident parent outputs
-    - Dep_D: transfer from DRAM when SRAM cannot satisfy demand
-    """
-
-    n_states = sct.num_states
-    n_blocks = sct.num_blocks
-
-    deps_by_child: dict[int, list[int]] = {}
-    for p, c in block_dependencies:
-        if 0 <= p < n_blocks and 0 <= c < n_blocks and p != c:
-            deps_by_child.setdefault(c, []).append(p)
-
-    # Delta processed sub-batches per state/block.
-    delta = [[0.0 for _ in range(n_blocks)] for _ in range(n_states)]
-    for i in range(n_states):
-        for j in range(n_blocks):
-            cur = float(sct.get(i, j))
-            prev = float(sct.get(i - 1, j)) if i > 0 else 0.0
-            delta[i][j] = max(0.0, cur - prev)
-
-    dep_c = 0.0
-    dep_s = 0.0
-    dep_d = 0.0
-
-    for i in range(n_states):
-        prev_i = max(0, i - 1)
-        for child in range(n_blocks):
-            need_sb = float(delta[i][child])
-            if need_sb <= 0:
-                continue
-
-            parents = deps_by_child.get(child, [])
-            if not parents:
-                # Source/input block: conservatively model as DRAM-fed.
-                dep_d += need_sb * float(block_volumes[child])
-                continue
-
-            per_parent_need = need_sb / float(max(1, len(parents)))
-            for parent in parents:
-                vol = float(block_volumes[parent])
-
-                # Dep_C: direct same-state producer->consumer transfer.
-                parent_new = float(delta[i][parent])
-                from_c = min(per_parent_need, parent_new)
-                remain = per_parent_need - from_c
-
-                # Dep_S: read from SRAM range tracked by (MeT_S, ScT].
-                sram_live = max(0.0, float(sct.get(prev_i, parent)) - float(met.sram[prev_i, parent]))
-                from_s = min(remain, sram_live)
-                remain -= from_s
-
-                # Dep_D: fallback to DRAM range tracked by (MeT_D, ScT].
-                dram_live = max(0.0, float(sct.get(prev_i, parent)) - float(met.dram[prev_i, parent]))
-                from_d = min(remain, dram_live)
-                remain -= from_d
-
-                if remain > 0.0:
-                    # Conservative completion from DRAM when historical ranges are insufficient.
-                    from_d += remain
-
-                dep_c += from_c * vol
-                dep_s += from_s * vol
-                dep_d += from_d * vol
-
-    return dep_c, dep_s, dep_d
+def _estimate_dep_traffic(sct, met, block_volumes, block_dependencies,
+                         block_input_volumes=None, block_weight_volumes=None, edge_volumes=None):
+    return estimate_traffic(sct, met, block_volumes, block_dependencies,
+                            block_input_volumes, block_weight_volumes, edge_volumes)
 
 
 def _estimate_memory_cost(
@@ -456,12 +390,18 @@ def _estimate_memory_cost(
     dram_noc_hops: float,
     noc_hops_compute: float,
     noc_hops_sram: float,
+    block_input_volumes: Sequence[float] | None = None,
+    block_weight_volumes: Sequence[float] | None = None,
+    edge_volumes: dict[tuple[int, int], float] | None = None,
 ) -> tuple[float, float]:
     dep_c, dep_s, dep_d = _estimate_dep_traffic(
         sct=sct,
         met=met,
         block_volumes=block_volumes,
         block_dependencies=block_dependencies,
+        block_input_volumes=block_input_volumes,
+        block_weight_volumes=block_weight_volumes,
+        edge_volumes=edge_volumes,
     )
 
     # Eq.19: (Dep_C*H_C + Dep_S*H_S + Dep_D*H_D)/BW_NoC + Dep_D/BW_D
@@ -490,8 +430,6 @@ def _prepare_blocks_and_dependencies(
 ) -> tuple[list[Block], list[tuple[int, int]]]:
     prepared = [Block(name=b.name, layers=list(b.layers), sub_blocks=list(b.sub_blocks)) for b in blocks]
     deps = derive_block_dependencies(prepared)
-    if not deps and len(prepared) > 1:
-        deps = _default_linear_dependencies(len(prepared))
 
     if not cfg.enable_chain_block_merge:
         return prepared, deps
@@ -502,8 +440,6 @@ def _prepare_blocks_and_dependencies(
         max_layers_per_block=cfg.max_layers_per_block,
         min_layers_per_block=cfg.min_layers_per_block,
     )
-    if not merged_deps and len(merged_blocks) > 1:
-        merged_deps = _default_linear_dependencies(len(merged_blocks))
 
     return merged_blocks, merged_deps
 
@@ -578,6 +514,7 @@ def _build_result_from_candidate(
         hierarchy_level=hierarchy_level,
         hierarchy_notes=list(hierarchy_notes or []),
         hierarchy_traces=traces,
+        solver_reports=[r.to_dict() for r in (candidate.sct_opt.report, candidate.met_opt.report) if r is not None],
     )
 
 
@@ -1093,6 +1030,9 @@ def _flat_search_prepared(
     state_block_latency_override: Sequence[Sequence[float | None]] | None = None,
     state_block_energy_override: Sequence[Sequence[float | None]] | None = None,
     enforce_end_dram_dependency: bool = False,
+    block_input_volumes_override: Sequence[float] | None = None,
+    block_weight_volumes_override: Sequence[float] | None = None,
+    forbid_tile_overcommit: bool = False,
 ) -> SearchResult:
     if not work_blocks:
         raise ValueError("blocks must not be empty")
@@ -1105,7 +1045,7 @@ def _flat_search_prepared(
         block_flops = [max(1e-9, float(v)) for v in block_flops_override]
 
     if block_outputs_override is None:
-        block_outputs = [b.total_output_size() for b in work_blocks]
+        block_outputs = [b.boundary_output_size() for b in work_blocks]
     else:
         if len(block_outputs_override) != len(work_blocks):
             raise ValueError("block_outputs_override length mismatch")
@@ -1118,6 +1058,9 @@ def _flat_search_prepared(
 
     block_map_dims = [list(b.aggregate_map_dims()) for b in work_blocks]
     block_names = [b.name for b in work_blocks]
+    inputs = [b.external_input_size() for b in work_blocks] if block_input_volumes_override is None else list(block_input_volumes_override)
+    weights = [b.weight_volume() for b in work_blocks] if block_weight_volumes_override is None else list(block_weight_volumes_override)
+    edge_volumes = derive_block_edge_volumes(work_blocks) if block_outputs_override is None else None
 
     n_states, state_order, categories, active_pes, state_active_blocks = _build_state_metadata(
         num_blocks=len(work_blocks),
@@ -1167,11 +1110,17 @@ def _flat_search_prepared(
             if not _caps_cover_pipeline_windows(caps, total_sub_batches, len(work_blocks), n_states):
                 caps = None
 
+        if forbid_tile_overcommit and len(work_blocks) > config.num_pes:
+            caps = ([total_sub_batches] * n_states) if caps is None else caps
+            for i, active in enumerate(state_active_blocks):
+                if len(active) > config.num_pes:
+                    caps[i] = 0
+
         try:
             sct_opt = optimize_sct_table(
-                block_flops=block_flops,
-                block_outputs=block_outputs,
-                block_map_dims=block_map_dims,
+                block_flops=[v * sub_batch for v in block_flops],
+                block_outputs=[v * sub_batch for v in block_outputs],
+                block_map_dims=[list(b.aggregate_map_dims(sub_batch)) for b in work_blocks],
                 block_unit_latency_override=block_unit_latency_override,
                 block_unit_energy_override=block_unit_energy_override,
                 state_block_latency_override=state_block_latency_override,
@@ -1190,6 +1139,9 @@ def _flat_search_prepared(
                 compute_power_per_tile=config.compute_power_per_tile,
                 energy_per_op=config.compute_energy_per_op,
                 allow_fallback=config.allow_solver_fallback,
+                solver_time_limit_s=config.solver_time_limit_s,
+                edp_method=config.edp_method,
+                canonical_fastpath=config.canonical_fastpath,
                 final_counts_per_block=final_counts_per_block,
                 initial_counts_per_block=initial_counts_per_block,
                 state_count_lower_bounds=state_count_lower_bounds,
@@ -1226,12 +1178,13 @@ def _flat_search_prepared(
     stage1_candidates.sort(key=lambda x: x.sct_opt.objective)
     if config.strict_paper_mode:
         k1 = _topk_by_ratio_or_count(
-            total=len(stage1_candidates),
+            total=len(sub_batch_candidates),
             ratio=float(config.top_k1_ratio),
             fallback_count=int(config.top_k1),
         )
     else:
         k1 = max(1, min(len(stage1_candidates), int(config.top_k1)))
+    k1 = min(k1, len(stage1_candidates))
     stage1_candidates = stage1_candidates[:k1]
     _progress(config, f"[Stage-1] keep top-K1={k1} candidates")
 
@@ -1242,7 +1195,10 @@ def _flat_search_prepared(
         try:
             met_opt = optimize_memory_table(
                 sct=cand.sct_opt.sct,
-                block_volumes=block_outputs,
+                block_volumes=[v * cand.sub_batch for v in block_outputs],
+                block_input_volumes=[v * cand.sub_batch for v in inputs],
+                block_weight_volumes=weights,
+                edge_volumes=None if edge_volumes is None else {edge: v*cand.sub_batch for edge,v in edge_volumes.items()},
                 block_dependencies=block_deps,
                 sram_capacity=config.sram_capacity,
                 dram_capacity=config.dram_capacity,
@@ -1256,6 +1212,7 @@ def _flat_search_prepared(
                 weight_energy=config.weight_energy,
                 use_edp_objective=config.use_edp_objective,
                 allow_fallback=config.allow_solver_fallback,
+                solver_time_limit_s=config.solver_time_limit_s,
                 enforce_end_dram_dependency=enforce_end_dram_dependency,
             )
         except Exception as exc:
@@ -1265,7 +1222,10 @@ def _flat_search_prepared(
         memory_latency, memory_energy = _estimate_memory_cost(
             sct=cand.sct_opt.sct,
             met=met_opt.table,
-            block_volumes=block_outputs,
+            block_volumes=[v * cand.sub_batch for v in block_outputs],
+                block_input_volumes=[v * cand.sub_batch for v in inputs],
+                block_weight_volumes=weights,
+                edge_volumes=None if edge_volumes is None else {edge: v*cand.sub_batch for edge,v in edge_volumes.items()},
             block_dependencies=block_deps,
             noc_bandwidth=config.noc_bandwidth,
             dram_bandwidth=config.dram_bandwidth,
@@ -1289,12 +1249,13 @@ def _flat_search_prepared(
     stage2_candidates.sort(key=lambda x: x.met_opt.objective if x.met_opt is not None else float("inf"))
     if config.strict_paper_mode:
         k2 = _topk_by_ratio_or_count(
-            total=len(stage2_candidates),
+            total=len(sub_batch_candidates),
             ratio=float(config.top_k2_ratio),
             fallback_count=int(config.top_k2),
         )
     else:
         k2 = max(1, min(len(stage2_candidates), int(config.top_k2)))
+    k2 = min(k2, len(stage2_candidates))
     stage2_candidates = stage2_candidates[:k2]
     _progress(config, f"[Stage-2] keep top-K2={k2} candidates")
 
@@ -1489,14 +1450,14 @@ def _reverse_dependencies_for_backward(
         bc = num_blocks - 1 - p
         if bp != bc:
             out.add((bp, bc))
-    if not out and num_blocks > 1:
-        return _default_linear_dependencies(num_blocks)
     return sorted(out)
 
 
 def _phase_payload(res: SearchResult) -> dict[str, object]:
     return {
         "best_sub_batch": int(res.best_sub_batch),
+        "initial_counts": list(res.sct.initial_counts or [0]*res.sct.num_blocks),
+        "solver_reports": res.solver_reports,
         "scheduled_blocks": list(res.scheduled_blocks),
         "block_dependencies": list(res.block_dependencies),
         "state_order": list(res.state_order),
@@ -1749,7 +1710,9 @@ def _search_training_with_recomputation(
             try:
                 fw_met_opt = optimize_memory_table(
                     sct=fw_res_base.sct,
-                    block_volumes=base_outputs,
+                    block_volumes=[v * sub_batch for v in base_outputs],
+                    block_input_volumes=[b.external_input_size() * sub_batch for b in work_blocks],
+                    block_weight_volumes=[b.weight_volume() for b in work_blocks],
                     block_dependencies=block_deps,
                     sram_capacity=phase_cfg.sram_capacity,
                     dram_capacity=phase_cfg.dram_capacity,
@@ -1763,6 +1726,7 @@ def _search_training_with_recomputation(
                     weight_energy=phase_cfg.weight_energy,
                     use_edp_objective=phase_cfg.use_edp_objective,
                     allow_fallback=False,
+                    solver_time_limit_s=config.solver_time_limit_s,
                     enforce_end_dram_dependency=True,
                     end_dram_upper_bounds=desired_md_ub,
                     force_final_sram_empty=True,
@@ -1776,7 +1740,9 @@ def _search_training_with_recomputation(
             fw_memory_latency, fw_memory_energy = _estimate_memory_cost(
                 sct=fw_res_base.sct,
                 met=fw_met_opt.table,
-                block_volumes=base_outputs,
+                block_volumes=[v * sub_batch for v in base_outputs],
+                    block_input_volumes=[b.external_input_size() * sub_batch for b in work_blocks],
+                    block_weight_volumes=[b.weight_volume() for b in work_blocks],
                 block_dependencies=block_deps,
                 noc_bandwidth=phase_cfg.noc_bandwidth,
                 dram_bandwidth=phase_cfg.dram_bandwidth,
@@ -1921,27 +1887,12 @@ def search_schedule(
     if bool(config.enable_training_recomputation):
         return _search_training_with_recomputation(blocks=blocks, config=config)
 
-    use_hier = bool(config.enable_hierarchical_pipeline) and int(config.max_hierarchy_depth) > 1
-    if use_hier:
-        return _hierarchical_search(
-            blocks=blocks,
-            config=config,
-            depth=max(1, int(config.max_hierarchy_depth)),
-            lineage=[],
-        )
+    if (config.enable_hierarchical_pipeline or config.derive_recursive_traces) and config.max_hierarchy_depth > 1:
+        from search.nested_search import NestedSearch
+        prepared, _ = _prepare_blocks_and_dependencies(blocks, config)
+        return NestedSearch(depth=config.max_hierarchy_depth).run(prepared, config)
 
     work_blocks, block_deps = _prepare_blocks_and_dependencies(blocks, config)
-    use_joint = bool(config.derive_recursive_traces) and int(config.max_hierarchy_depth) > 1
-    if use_joint:
-        return _recursive_joint_optimize_prepared(
-            work_blocks=work_blocks,
-            block_deps=block_deps,
-            config=config,
-            depth_remaining=max(1, int(config.max_hierarchy_depth)),
-            hierarchy_level=0,
-            hierarchy_notes=[],
-            trace_path="root",
-        )
     return _flat_search_prepared(
         work_blocks=work_blocks,
         block_deps=block_deps,
@@ -1950,7 +1901,6 @@ def search_schedule(
         hierarchy_notes=[],
         trace_path="root",
     )
-
 
 
 

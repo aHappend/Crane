@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-09-21T15:43:51.551089+00:00",
+  "rounds_per_layer": 20,
+  "seeds": [
+    7,
+    19,
+    43
+  ],
+  "runs": [
+    {
+      "network": "resnet",
+      "seed": 7,
+      "returncode": 0,
+      "directory": "resnet_seed7"
+    },
+    {
+      "network": "resnet",
+      "seed": 19,
+      "returncode": 0,
+      "directory": "resnet_seed19"
+    },
+    {
+      "network": "resnet",
+      "seed": 43,
+      "returncode": 0,
+      "directory": "resnet_seed43"
+    },
+    {
+      "network": "vgg",
+      "seed": 7,
+      "returncode": 0,
+      "directory": "vgg_seed7"
+    },
+    {
+      "network": "vgg",
+      "seed": 19,
+      "returncode": 0,
+      "directory": "vgg_seed19"
+    },
+    {
+      "network": "vgg",
+      "seed": 43,
+      "returncode": 0,
+      "directory": "vgg_seed43"
+    },
+    {
+      "network": "goog",
+      "seed": 7,
+      "returncode": 0,
+      "directory": "goog_seed7"
+    },
+    {
+      "network": "goog",
+      "seed": 19,
+      "returncode": 0,
+      "directory": "goog_seed19"
+    },
+    {
+      "network": "goog",
+      "seed": 43,
+      "returncode": 0,
+      "directory": "goog_seed43"
+    },
+    {
+      "network": "trans_cell",
+      "seed": 7,
+      "returncode": 0,
+      "directory": "trans_cell_seed7"
+    },
+    {
+      "network": "trans_cell",
+      "seed": 19,
+      "returncode": 0,
+      "directory": "trans_cell_seed19"
+    },
+    {
+      "network": "trans_cell",
+      "seed": 43,
+      "returncode": 0,
+      "directory": "trans_cell_seed43"
+    }
+  ]
+}

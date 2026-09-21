@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "kind": "SET_Polar_intra_layer",
+  "upstream_revision": "a7bd73912f58d9fea10fadab693eebd4e6e3054d",
+  "network": "resnet",
+  "max_batch": 64,
+  "max_tiles": 16,
+  "rows": 8064,
+  "valid_rows": 8064,
+  "frequency_hz": 1000000000.0,
+  "core_mac_count": 1024,
+  "core_sram_bytes": 1048576,
+  "cost_units": {
+    "cycles": "1 ns at 1 GHz",
+    "energy_pj": "picojoules summed across allocated tiles"
+  },
+  "included": [
+    "MAC",
+    "local buffers",
+    "local buses",
+    "intra-tile buffer accesses"
+  ],
+  "excluded": [
+    "external NoC/DRAM",
+    "placement-dependent hops",
+    "external shared-buffer writes"
+  ],
+  "csv_sha256": "d765b40c00bd2d3531e9e8f9e56beafee11b300696ce839a4a63540fc8f42795",
+  "bridge_sha256": "2b9fb33d9a8a9ef4986ade7c82ea68f0336138111402ad97619233c7ce95d1ef",
+  "generated_source_sha256": "4dcd32541ed0a43bd4e48eb97966e1e49b38edd1e2cd95dba877652a1c884ba9",
+  "elapsed_seconds": 1.4599384211469442
+}

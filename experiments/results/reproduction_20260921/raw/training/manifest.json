@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-09-21T15:45:12.024372+00:00",
+  "suite": {
+    "suite": "capacity_bounded_training_reference",
+    "defaults": {
+      "mode": "training",
+      "tiles": 2,
+      "batch": 256,
+      "sub_batches": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32
+      ],
+      "timeout_seconds": 60
+    },
+    "cases": [
+      {
+        "model": "resnet50",
+        "dram_mb": 64,
+        "expected_status": "infeasible"
+      },
+      {
+        "model": "resnet50",
+        "dram_mb": 256
+      },
+      {
+        "model": "resnet50",
+        "dram_mb": 32768
+      },
+      {
+        "model": "resnet101",
+        "dram_mb": 64,
+        "expected_status": "infeasible"
+      },
+      {
+        "model": "resnet101",
+        "dram_mb": 256
+      },
+      {
+        "model": "resnet101",
+        "dram_mb": 32768
+      },
+      {
+        "model": "googlenet",
+        "dram_mb": 64
+      },
+      {
+        "model": "googlenet",
+        "dram_mb": 256
+      },
+      {
+        "model": "googlenet",
+        "dram_mb": 32768
+      }
+    ]
+  },
+  "config_sha256": "23988996bf67d2653a70547b307e96d521e3852167ca84ee7dfee0803b09a6c7",
+  "environment": {
+    "commit": "18edeb7ccf9582b919de998b31b28c846b539a0e",
+    "dirty": true,
+    "source_sha256": {
+      "model/__init__.py": "d7ff0f14a28b22cb2a5eb0fcb7171bbd934acf8412616941738f4ab8a69d9743",
+      "model/dag_parser.py": "0fd4aef460943f8f685253a172c07443c24c9306b670397f3fe334511481c856",
+      "model/layer.py": "6713143dcd7e755b8207b79df8caad2d92f371fb74d72a32636b8408c391c5b8",
+      "scheduler/__init__.py": "c136078111da201f39950e2526d4235e8a670aea1654f48e603f5a8a71ad8424",
+      "scheduler/block.py": "61add86fefd4581d62a6398724b196f787c2e943248ef88d2860aba6dc8d06dc",
+      "scheduler/hardware_profile.py": "122de6719c55224d9f1cf06fa8c684d45f4f2dee1ceeb2303832162b2a339873",
+      "scheduler/memory_table.py": "4493605eec23d43b7991a682a160462733f66a730e34727dabab3ec34e6a3879",
+      "scheduler/milp_solver.py": "d9c00ccb1fc4ba44876800db0f394be901bddb6919bf191065abaf82f921516e",
+      "scheduler/optimization.py": "7866a5f3f74c761fb2eead1326876279d178b72ddc27dd5b17b7ce7225343ba1",
+      "scheduler/paper_milp.py": "5995931e295601c863852ec674f8346c63f33c40afe97e5adaabd1037faf01a0",
+      "scheduler/scheduling_table.py": "29b8f775d2eec5356ad43de7f83062c1af19550314c1e5bebe86f003a335dd7e",
+      "scheduler/traffic.py": "22d2be44bcc6b1785997c066c122e249431540d51c18c32fe2094d2c535284ea",
+      "search/__init__.py": "81ec0d3d0e38695268d37236608eb8fb916c64a0c5a3f770f755cbd7c87d8e22",
+      "search/nested_search.py": "2425780350ceb5c11ce6adbecff122650f12cfedaabf4db92b532b582035d095",
+      "search/scheduler_search.py": "fc177ce2fb7efb6667f0fe3df7239467fbce10025f239a5f627c5850c29d9ae0",
+      "search/training_cohorts.py": "b0fafbbfa0078cc93fef73572735842281f124c0a3fa4f13572c9db9c958d727",
+      "cost_model/__init__.py": "77278780106771d76f7f29533117dcf022bc3f7ce00e89945c6c678f4a067139",
+      "cost_model/energy_model.py": "091cb5c13925f90dc10f484ca41414bd4eab40ce82b87659fbef7788dc386c27",
+      "cost_model/latency_model.py": "032f37adaf29de4fb02f06c488812120bbe303ede1e5549bd88491dfde27563a",
+      "cost_model/set_profile.py": "8c0c6001dd40114070468c4058ce0e29c511210edaf2ce4c9dd1a6125ee71666",
+      "workloads/__init__.py": "228a4471d4b4b192d6b6a53582f65bfd79e4b492b262f0baee55b4929b919c8d",
+      "workloads/hierarchy.py": "319c3b2169756b0ce9b87571a31d00623e42484ecb5179aaa71151258f9b6dbc",
+      "workloads/set_models.py": "ffd9f59cd80ffce84580d830ba8f83f889d98a8aca77957b70e2a37c649c8d9c",
+      "experiments/__init__.py": "fe99d1570bf69920ed8c8d875d6a51da117165c97dafc26e020f355479ec3592",
+      "experiments/native_set_suite.py": "3b55f83f7f43c2f3107d372941a47642fcc04582b71efa7d92414e5bf3e933d4",
+      "experiments/run.py": "07a82acdf1c6c625961b5e634a7f1aa0200c30b129c0d9d021497766a1d7f3ef"
+    },
+    "source_digest": "8458f3833ae7c3f51a2a676cd940b7d3837d286b105e140092c3fd3e7cb603fc",
+    "python": "3.13.5",
+    "platform": "Linux-6.8.0-1065-azure-x86_64-with-glibc2.35",
+    "numpy": "2.2.6",
+    "ortools": "9.15.6755"
+  },
+  "cases": [
+    {
+      "directory": "case_000",
+      "status": "infeasible",
+      "expected_status": "infeasible",
+      "elapsed_seconds": 0.2202160470187664,
+      "result_sha256": "433a3f4f3d153f6d97db839899307b3b36a306fec69b19ad25935b8f00778c16"
+    },
+    {
+      "directory": "case_001",
+      "status": "completed",
+      "expected_status": "completed",
+      "elapsed_seconds": 0.21477201697416604,
+      "result_sha256": "fb8264faf4d4d1e817cfb8e3237bd877fba5de07e8cbf90ddbac3300cd5e2347"
+    },
+    {
+      "directory": "case_002",
+      "status": "completed",
+      "expected_status": "completed",
+      "elapsed_seconds": 0.2171200809534639,
+      "result_sha256": "0a34a91bb752b1ecb233cde5b9edee26eb1acee0d854b8ae1be10608c673ba04"
+    },
+    {
+      "directory": "case_003",
+      "status": "infeasible",
+      "expected_status": "infeasible",
+      "elapsed_seconds": 0.21449618879705667,
+      "result_sha256": "0349d3356954183fde329face1c3dae1ec304284223483c6593d569bf4e1d5dc"
+    },
+    {
+      "directory": "case_004",
+      "status": "completed",
+      "expected_status": "completed",
+      "elapsed_seconds": 0.2146957500372082,
+      "result_sha256": "ffcf969843a24cf67304b2a2c04cf7059b4888b7a082930055e27c6ad6c414ce"
+    },
+    {
+      "directory": "case_005",
+      "status": "completed",
+      "expected_status": "completed",
+      "elapsed_seconds": 0.27374142897315323,
+      "result_sha256": "362b8f5c3e66078889003ff40f34108d324bdd0d0cfb4c172b7adc682870495f"
+    },
+    {
+      "directory": "case_006",
+      "status": "completed",
+      "expected_status": "completed",
+      "elapsed_seconds": 0.2724809299688786,
+      "result_sha256": "4338946392d0659a667175f6db6714fa9a0ed98a52a1f0127db6a7e823ca3986"
+    },
+    {
+      "directory": "case_007",
+      "status": "completed",
+      "expected_status": "completed",
+      "elapsed_seconds": 0.21951799211092293,
+      "result_sha256": "6daea59b12415841cfc0cbd851fae407a092e808d6fc451faf0861c3ecd99090"
+    },
+    {
+      "directory": "case_008",
+      "status": "completed",
+      "expected_status": "completed",
+      "elapsed_seconds": 0.21484783105552197,
+      "result_sha256": "4d6ca024c196f11b6830681c00ef55e9fd002c8968a6e5bcbe8392047ae84b83"
+    }
+  ]
+}

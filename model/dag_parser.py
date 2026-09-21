@@ -16,8 +16,11 @@ def parse_layers(specs: Iterable[dict]) -> Dict[str, Layer]:
     }
     """
 
+    specs = list(specs)
     layer_dict: Dict[str, Layer] = {}
     for spec in specs:
+        if spec["name"] in layer_dict:
+            raise ValueError(f"duplicate layer name: {spec['name']}")
         layer_dict[spec["name"]] = Layer(
             name=spec["name"],
             flops=float(spec["flops"]),
@@ -29,8 +32,11 @@ def parse_layers(specs: Iterable[dict]) -> Dict[str, Layer]:
     for spec in specs:
         child = layer_dict[spec["name"]]
         for parent_name in spec.get("parents", []):
+            if parent_name not in layer_dict:
+                raise ValueError(f"unknown parent: {parent_name}")
             layer_dict[parent_name].connect_to(child)
 
+    topological_sort(layer_dict.values())
     return layer_dict
 
 
@@ -55,4 +61,3 @@ def topological_sort(layers: Iterable[Layer]) -> List[Layer]:
         raise ValueError("DAG contains cycles")
 
     return result
-

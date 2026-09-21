@@ -1,0 +1,70 @@
+{
+  "suite": "native_core_inference",
+  "defaults": {
+    "mode": "nested",
+    "batch": 64,
+    "tiles": 16,
+    "sub_batches": [
+      4,
+      8
+    ],
+    "fanout": 4,
+    "depth": 6,
+    "solver_seconds": 3,
+    "timeout_seconds": 240
+  },
+  "cases": [
+    {
+      "model": "resnet50",
+      "mode": "nested",
+      "core_profile": "experiments/reference_profiles/resnet50_t16"
+    },
+    {
+      "model": "resnet50",
+      "mode": "serial",
+      "core_profile": "experiments/reference_profiles/resnet50_t16"
+    },
+    {
+      "model": "vgg19",
+      "mode": "nested",
+      "core_profile": "experiments/reference_profiles/vgg19_t16"
+    },
+    {
+      "model": "vgg19",
+      "mode": "serial",
+      "core_profile": "experiments/reference_profiles/vgg19_t16"
+    },
+    {
+      "model": "googlenet",
+      "mode": "nested",
+      "core_profile": "experiments/reference_profiles/googlenet_t16"
+    },
+    {
+      "model": "googlenet",
+      "mode": "serial",
+      "core_profile": "experiments/reference_profiles/googlenet_t16"
+    },
+    {
+      "model": "transformer_cell",
+      "mode": "nested",
+      "core_profile": "experiments/reference_profiles/transformer_cell_t16"
+    },
+    {
+      "model": "transformer_cell",
+      "mode": "serial",
+      "core_profile": "experiments/reference_profiles/transformer_cell_t16"
+    },
+    {
+      "model": "resnet50",
+      "mode": "nested",
+      "batch": 16,
+      "core_profile": "experiments/reference_profiles/resnet50_t16"
+    },
+    {
+      "model": "resnet50",
+      "mode": "serial",
+      "batch": 16,
+      "core_profile": "experiments/reference_profiles/resnet50_t16"
+    }
+  ]
+}
