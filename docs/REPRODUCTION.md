@@ -1,123 +1,112 @@
 # Reproduction scope and paper-to-code map
 
-The reference is [Gong et al., MICRO 2025](https://doi.org/10.1145/3725843.3756023).
-The repository implements a Python research model of its scheduling workflow.
-The paper states in §7.1 that its implementation is C++; this repository should
-be cited as a separate implementation.
+Reference: [Gong et al., MICRO 2025](https://doi.org/10.1145/3725843.3756023).
+This is an independent Python implementation. The paper describes a C++
+implementation; this repository is not the authors' released artifact.
 
-**Current evidence supports workflow reproduction and small-instance checks.**
-There is no validated reproduction here of the paper's complete evaluation,
-cycle-accurate cost calibration, or reported performance improvements.
+The current repository provides an end-to-end, reproducible **inference
+experiment workflow**, real network metadata, native SET core profiles, a
+checked training reference, raw results and an interactive demo. It does not
+establish reproduction of all paper figures, whole-chip cost fidelity, or the
+headline 21.01× EDP / 2.82× scheduling-speed claims.
 
-## Method coverage
+## Coverage
 
-“Implemented” below means that a code path exists, not that its equivalence to
-the paper has been proved. Tests exercise a small subset of feasible instances.
-
-| Paper concept | Implementation | Scope and qualification |
+| Paper concept | Current implementation and evidence | Remaining qualification |
 | --- | --- | --- |
-| §4 hierarchical blocks and dependencies | [`model/`](../model/), [`scheduler/block.py`](../scheduler/block.py) | Layer DAGs, nested blocks and linear-chain merging. Merging approximates graph partitioning. |
-| ScT, cumulative progress and processing windows; Eqs. 1–6 | [`scheduler/paper_milp.py`](../scheduler/paper_milp.py) | Integer variables, default `2N−1` states, completeness, monotonicity and dependency constraints. |
-| MeT and memory capacity; Eqs. 7–12 | [`scheduler/memory_table.py`](../scheduler/memory_table.py) | SRAM/DRAM cutoff tables with capacity and availability constraints. |
-| §5.3 training and recomputation; Eqs. 13–15 | [`search/scheduler_search.py`](../search/scheduler_search.py), `_search_training_with_recomputation` | FW, BW1 and BW2 search with retention profiles and scaled backward/recompute costs. No tensor training or accuracy evaluation. |
-| Compute and traffic cost evaluation | [`scheduler/paper_milp.py`](../scheduler/paper_milp.py), [`search/`](../search/), [`cost_model/`](../cost_model/) | Analytical mapping utilization, bandwidth and energy estimates. No cycle simulator or ARM memory compiler integration. |
-| Compute / traffic EDP objectives; Eqs. 22–23 | `_add_mccormick_product_objective` in both table solvers | McCormick relaxation of a product, followed by evaluation of the actual product on selected candidates. This is not an exact globally optimal EDP solver. |
-| Candidate pruning and final EDP selection | `_flat_search_prepared` | ScT candidates → top-K1 → MeT → top-K2 → total EDP. K2 is calculated over the surviving stage-2 candidates. |
-| §6 hierarchical structure optimization | `_hierarchical_search`, `_recursive_joint_optimize_prepared` | Bounded recursive optimization, cost feedback and trial expansions; heuristic choices differ from a full paper-equivalence implementation. |
-| §7.2 / §7.3 hardware settings | [`scheduler/hardware_profile.py`](../scheduler/hardware_profile.py) | Parameter translations with explicit units; choosing a profile alone does not reproduce the experiments. |
-| §7 result figures and baseline comparisons | No complete validated harness | SET / Tangram / TileFlow / MBS comparisons, calibration and numerical tolerances remain to be established. |
+| Hierarchical blocks and DAGs (§4) | `workloads/set_models.py`, `workloads/hierarchy.py`, `scheduler/block.py`; 16 compiled real graphs with branch/weight edges | Initial balanced partition is an explicit implementation choice, not an author-provided partition |
+| ScT / Eqs. 1–6 | `scheduler/paper_milp.py`; integer windows, completeness, default dependency gap 1 | Extra training/state bounds use the general MILP; default inference can use an equivalent exact reduction |
+| MeT / Eqs. 7–12 | `scheduler/memory_table.py`, shared interval logic in `scheduler/traffic.py` | Aggregate activation buffers and uniform hop costs; full placement-aware capacity is not modeled |
+| EDP optimization (§5.5) | Normalized exact integer-product MILP and eligible canonical vertex enumeration; independently checked against tiny exhaustive cases | Exactness applies to a fixed cost subproblem, not all hierarchy/memory choices |
+| Hierarchical optimization (§6) | `search/nested_search.py`; child batch equals one parent sub-batch, actual tile assignment, explicit memory splits, serial/canonical alternatives | Fixed balanced hierarchy and conservative half-budget split differ from the paper's full gradual-partition search |
+| Intra-layer correction (§5.5) | Recorded mappings from the actual pinned SET Polar mapper, used at fully expanded leaves | External NoC/DRAM, placement and shared-buffer-write costs remain separate approximations |
+| Training co-support (§5.3) | `search/training_cohorts.py`; FW/BW1/recompute/BW2 coverage, Figure-6 cohort check and real-network memory sweep | Serial uniform-cohort reference, not exhaustive per-layer checkpoint optimization |
+| Experimental MILP training | Retained in `search/scheduler_search.py` and `example/run_transformer_training_repro.py` | Not the validated evidence path for the recorded training report; gradient costs and resource handling require further audit |
+| SET baseline (§7) | Actual upstream executable, four networks × three fixed seeds, recorded patches/budgets/logs | Full SET and Python outer evaluators differ; no cross-model speedup claim |
+| Other baselines and paper figures | No complete Tangram / TileFlow / MBS harness | Their results and the complete paper figures remain to be reproduced |
 
-## Where the workloads come from
+See the [mathematical audit](MATHEMATICAL_AUDIT.md) for exact scope, derivations and
+invariants, and the [recorded report](../experiments/results/reproduction_20260921/REPORT.md)
+for actual outcomes.
 
-### SET reference definitions
+## Workload provenance
 
-`src/nns/*.cpp`, `include/network.h` and `include/nns/nns.h` are third-party
-reference material. [`src/nns/SOURCE.txt`](../src/nns/SOURCE.txt) records the
-SET-ISCA2023 origin and upstream commit. These files are not a complete SET
-build, trained weights, or an importable Crane benchmark dataset.
+`workloads/set_networks.json` was generated by compiling the upstream C++ network
+objects at SET revision `a7bd73912f58d9fea10fadab693eebd4e6e3054d`. The exporter
+records input/output shapes, operation counts, static weights, kernel/stride
+parameters and separate activation/weight-parent edges. Source file hashes and
+the exact revision are included. No trained weights or dataset samples are used.
 
-### Twelve network-family proxies
+Examples:
 
-`official_specs()` in
-[`example/run_official_nns_suite.py`](../example/run_official_nns_suite.py)
-contains hand-written `(name, GFLOPs, output_MB)` tuples for AlexNet, Darknet19,
-DenseNet, GNMT, GoogLeNet, Inception-ResNet, LLM, PNASNet, ResNet, Transformer,
-VGG and ZFNet. `build_layer_blocks()` connects these proxy nodes into chains.
+- ResNet-50: **72 nodes, 87 edges**, including all 16 residual joins.
+- Transformer: **471 nodes, 661 edges**, including attention weight dependencies.
+- The recorded Transformer performance experiment uses **`transformer_cell`**,
+  an 81-node SET cell; it does not stand in for the paper's Transformer-Large.
 
-The `source_ref` field is a reference pointer. The Python examples do not parse
-the corresponding C++ file to recover its exact shapes or graph. “Layer-level”
-in the proxy suite means one proxy node per block, not every original DNN layer.
+The complete exported Transformer has the dimensions in SET's definition. The
+paper's Transformer-Large, GPT-2 and OPT-6.7B configurations need separately
+matched shape specifications before claiming corresponding figure reproduction.
 
-### 471-node Transformer
+Older `example/run_official_nns_suite.py` and the old 471-node handwritten builder
+are retained for compatibility. Their hand-assigned proxy workloads are separate
+from the new `workloads/` data and are not used in the recorded native-core suite.
 
-`build_transformer_min_layers()` manually constructs a 471-node chain inspired
-by the SET Transformer definition. `_layer_profile()` assigns costs using layer
-names. It uses eight attention groups and hand-written dimensions, whereas the
-paper's Transformer-Large evaluation specifies a different workload, including
-16 heads and hidden dimension 1024 (§7.2). Do not interpret a matching layer
-count or `source_ref` as an exact workload match.
+## Cost-model boundaries
 
-The training example uses this same workload with backward and recomputation
-scale factors. It does not measure neural-network training time or accuracy.
+The new core profiles come from SET's actual `CoreMapper::genLayerMap` and search
+partition factors for each recorded layer, sub-batch and tile count. They include
+MAC, local-buffer and local-interconnect energy. The profile manifest lists all
+included/excluded terms and contains the generated bridge/source and CSV hashes.
 
-## Known modeling differences
+The outer Python evaluator still uses analytical NoC/DRAM traffic and simplified
+hop assumptions. Placement, contention, global-buffer fill/write energy and
+weight residency have not been fully matched to SET. The nested activation-budget
+split and the native mapper's internal buffer model are not a complete physical
+whole-chip SRAM validation. This prevents claiming the paper's §7.1 calibration
+accuracy, even though the same intra-layer implementation is used.
 
-1. **Relaxed objective.** A McCormick envelope bounds a bilinear product; without
-   additional exactness arguments it need not equal that product. An optimal
-   SCIP status for this linearized problem does not certify globally optimal
-   EDP for the original formulation. The code also accepts feasible statuses
-   and does not currently expose a solver gap in `SearchResult`.
-2. **Cost scaling.** Flat search reuses fixed block FLOPs and output sizes across
-   sub-batch candidates while changing the number of sub-batches. It does not
-   rebuild shape-aware costs for each sub-batch size. Workload calibration and
-   normalization across batch choices need validation before quantitative claims.
-3. **Hardware approximation.** Costs use aggregate capacity, simplified hop
-   assumptions and utilization estimates rather than complete placement,
-   contention, register/buffer energy or a validated cycle model.
-4. **Units and conventions.** The §7.2 helper uses decimal MB/GB and two ops per
-   MAC. Its formula gives 16.384 GB/s DRAM bandwidth for 16 tiles and 147.456 GB/s
-   for 144 tiles; the paper lists 16 / 144 GB/s. The training helper defaults to
-   32768 MB, while the paper states 32 GB. These conventions are recorded, not
-   silently treated as identical configurations.
-5. **Search controls.** `strict_paper_mode=True` selects the repository's
-   staged/pruned search behavior. It does not remove the above approximations.
-   Defaults and example-specific overrides differ; inspect `SearchConfig` and
-   record the complete configuration.
-6. **Hierarchy boundaries.** Recursive search may retry with free child
-   boundaries after a constrained child solve fails. Inspect `hierarchy_notes`
-   for `boundary_retry=free` and trace fields for `free_fallback`. This is
-   separate from `allow_solver_fallback`, which controls solver replacement.
-7. **Graph handling.** The data model supports DAG edges, but many bundled
-   examples deliberately build chains. Search infers a linear chain when a
-   multi-block input has no dependencies, so an edgeless input is not treated
-   as a set of independent branches.
+The inference hardware helper retains its explicit decimal conversion: 16 tiles
+produce 16.384 GB/s from its TOPS formula, while the paper lists 16 GB/s. Native
+SET uses its own original conventions, including 1 MiB tile buffers. These
+conventions are preserved in manifests rather than silently equated.
 
-## What the tests establish
+## Training evidence
 
-The test suite checks real SCIP execution, example imports and CLI startup,
-workload preservation across nested block merges, fork/join edge preservation,
-ScT completeness and monotonicity, memory bounds/capacity, small training phase
-aggregation, parent-bound recursive traces, and quick-start artifact generation.
+The recorded training suite uses real ResNet-50, ResNet-101 and GoogLeNet operation
+and activation sizes with two modeled tiles, batch 256 and three DRAM budgets.
+It searches sub-batch sizes and uniform retained cohorts, with an explicit
+backward-work multiplier. Capacity includes activation checkpoints and one
+cohort of gradient workspace, and excludes static weight/optimizer-state storage.
 
-These are software correctness checks for the covered cases. They do not
-establish accuracy of the cost model, complete constraint equivalence, the
-quality of large-instance schedules, or reproduction of the paper's headline
-21.01× EDP / 2.82× scheduling-speed claims.
+Seven configurations are feasible. Two 64 MB configurations are infeasible
+**within this reference policy**. This is not a lower-bound proof against more
+flexible per-layer recomputation. No neural network was trained, and no training
+accuracy or GPU wall-time claim is made.
 
-Historical files in `outputs/runs/` predate the block double-counting fix. Keep
-them as historical artifacts and regenerate results for a new comparison;
-do not mix them with outputs from the corrected implementation.
+## Validation and numerical interpretation
+
+Checks cover exact small-instance EDP optima, batch-work conservation, interval
+identity, full multi-parent demand, graph preservation, nested invocation sizes,
+tile counts, modeled capacity, cohort coverage and artifact provenance. CI runs
+on Linux and Windows. The standalone demo was also exercised in a real headless
+browser at desktop/mobile widths.
+
+The recorded inference comparison contains an unfavorable VGG-19 result as well
+as improvements for other networks. Solver bounds certify only the named fixed
+subproblems. Overall hierarchy choices and model fidelity are separate issues.
+Historical `outputs/runs/` predate workload-accounting fixes and are not current
+numerical baselines.
 
 ## Remaining work
 
-| Milestone | Evidence needed to consider it complete |
-| --- | --- |
-| Exact workload reconstruction | Shape- and dependency-preserving imports; per-layer FLOPs/bytes and workload checksums matching each target paper experiment |
-| Cost-model validation | Documented batch scaling, precision and units; comparisons against a common SET schedule or cycle model with stated tolerances |
-| Solver formulation audit | Equation-by-equation constraints, tiny exhaustive oracles, objective-gap reporting and explicit status/time-limit handling |
-| Baseline evaluation | Pinned SET / Tangram / TileFlow / MBS implementations, matched hardware and workloads, raw measurements and repeatable commands |
-| Paper figure reproduction | Per-figure scripts, baseline provenance, configuration manifests and numerical comparison tables |
-| Redistribution readiness | Maintainer-selected license for original code and verified rights/terms for reference material |
-
-Track improvements against these milestones rather than marking the whole
-paper “reproduced” after a successful example run.
+1. Match all paper workload configurations, including the full Transformer/LLM
+   dimensions and training models, with per-model provenance.
+2. Reconcile placement, shared-buffer energy, weight residency and memory capacity
+   into a common whole-chip evaluator; perform fixed-schedule calibration.
+3. Extend training beyond uniform cohorts and validate per-layer checkpoints and
+   exact gradient tensor/resource accounting.
+4. Reproduce matched Tangram, TileFlow and MBS comparisons and each paper figure
+   with declared numerical tolerances.
+5. Establish redistribution terms for all reference material and select a license
+   for the original code.

@@ -17,7 +17,8 @@
   "cases": [
     {
       "model": "resnet50",
-      "dram_mb": 64
+      "dram_mb": 64,
+      "expected_status": "infeasible"
     },
     {
       "model": "resnet50",
@@ -29,7 +30,8 @@
     },
     {
       "model": "resnet101",
-      "dram_mb": 64
+      "dram_mb": 64,
+      "expected_status": "infeasible"
     },
     {
       "model": "resnet101",

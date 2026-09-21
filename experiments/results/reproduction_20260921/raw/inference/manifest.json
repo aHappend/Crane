@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-09-21T15:37:20.346863+00:00",
+  "suite": {
+    "suite": "native_core_inference",
+    "defaults": {
+      "mode": "nested",
+      "batch": 64,
+      "tiles": 16,
+      "sub_batches": [
+        4,
+        8
+      ],
+      "fanout": 4,
+      "depth": 6,
+      "solver_seconds": 3,
+      "timeout_seconds": 240
+    },
+    "cases": [
+      {
+        "model": "resnet50",
+        "mode": "nested",
+        "core_profile": "experiments/reference_profiles/resnet50_t16"
+      },
+      {
+        "model": "resnet50",
+        "mode": "serial",
+        "core_profile": "experiments/reference_profiles/resnet50_t16"
+      },
+      {
+        "model": "vgg19",
+        "mode": "nested",
+        "core_profile": "experiments/reference_profiles/vgg19_t16"
+      },
+      {
+        "model": "vgg19",
+        "mode": "serial",
+        "core_profile": "experiments/reference_profiles/vgg19_t16"
+      },
+      {
+        "model": "googlenet",
+        "mode": "nested",
+        "core_profile": "experiments/reference_profiles/googlenet_t16"
+      },
+      {
+        "model": "googlenet",
+        "mode": "serial",
+        "core_profile": "experiments/reference_profiles/googlenet_t16"
+      },
+      {
+        "model": "transformer_cell",
+        "mode": "nested",
+        "core_profile": "experiments/reference_profiles/transformer_cell_t16"
+      },
+      {
+        "model": "transformer_cell",
+        "mode": "serial",
+        "core_profile": "experiments/reference_profiles/transformer_cell_t16"
+      },
+      {
+        "model": "resnet50",
+        "mode": "nested",
+        "batch": 16,
+        "core_profile": "experiments/reference_profiles/resnet50_t16"
+      },
+      {
+        "model": "resnet50",
+        "mode": "serial",
+        "batch": 16,
+        "core_profile": "experiments/reference_profiles/resnet50_t16"
+      }
+    ]
+  },
+  "config_sha256": "0172914cf5c2982cba807a20dbe648b37c95bece491f03e6f00b6c8e4469c17a",
+  "environment": {
+    "commit": "18edeb7ccf9582b919de998b31b28c846b539a0e",
+    "dirty": false,
+    "source_sha256": {
+      "model/__init__.py": "d7ff0f14a28b22cb2a5eb0fcb7171bbd934acf8412616941738f4ab8a69d9743",
+      "model/dag_parser.py": "0fd4aef460943f8f685253a172c07443c24c9306b670397f3fe334511481c856",
+      "model/layer.py": "6713143dcd7e755b8207b79df8caad2d92f371fb74d72a32636b8408c391c5b8",
+      "scheduler/__init__.py": "c136078111da201f39950e2526d4235e8a670aea1654f48e603f5a8a71ad8424",
+      "scheduler/block.py": "61add86fefd4581d62a6398724b196f787c2e943248ef88d2860aba6dc8d06dc",
+      "scheduler/hardware_profile.py": "122de6719c55224d9f1cf06fa8c684d45f4f2dee1ceeb2303832162b2a339873",
+      "scheduler/memory_table.py": "4493605eec23d43b7991a682a160462733f66a730e34727dabab3ec34e6a3879",
+      "scheduler/milp_solver.py": "d9c00ccb1fc4ba44876800db0f394be901bddb6919bf191065abaf82f921516e",
+      "scheduler/optimization.py": "7866a5f3f74c761fb2eead1326876279d178b72ddc27dd5b17b7ce7225343ba1",
+      "scheduler/paper_milp.py": "5995931e295601c863852ec674f8346c63f33c40afe97e5adaabd1037faf01a0",
+      "scheduler/scheduling_table.py": "29b8f775d2eec5356ad43de7f83062c1af19550314c1e5bebe86f003a335dd7e",
+      "scheduler/traffic.py": "22d2be44bcc6b1785997c066c122e249431540d51c18c32fe2094d2c535284ea",
+      "search/__init__.py": "81ec0d3d0e38695268d37236608eb8fb916c64a0c5a3f770f755cbd7c87d8e22",
+      "search/nested_search.py": "2425780350ceb5c11ce6adbecff122650f12cfedaabf4db92b532b582035d095",
+      "search/scheduler_search.py": "fc177ce2fb7efb6667f0fe3df7239467fbce10025f239a5f627c5850c29d9ae0",
+      "search/training_cohorts.py": "a9ddef9f0634186846a496806ae860bf95e7e05bff0dc64e38f7f8034fc01e80",
+      "cost_model/__init__.py": "77278780106771d76f7f29533117dcf022bc3f7ce00e89945c6c678f4a067139",
+      "cost_model/energy_model.py": "091cb5c13925f90dc10f484ca41414bd4eab40ce82b87659fbef7788dc386c27",
+      "cost_model/latency_model.py": "032f37adaf29de4fb02f06c488812120bbe303ede1e5549bd88491dfde27563a",
+      "cost_model/set_profile.py": "8c0c6001dd40114070468c4058ce0e29c511210edaf2ce4c9dd1a6125ee71666",
+      "workloads/__init__.py": "228a4471d4b4b192d6b6a53582f65bfd79e4b492b262f0baee55b4929b919c8d",
+      "workloads/hierarchy.py": "319c3b2169756b0ce9b87571a31d00623e42484ecb5179aaa71151258f9b6dbc",
+      "workloads/set_models.py": "ffd9f59cd80ffce84580d830ba8f83f889d98a8aca77957b70e2a37c649c8d9c",
+      "experiments/__init__.py": "fe99d1570bf69920ed8c8d875d6a51da117165c97dafc26e020f355479ec3592",
+      "experiments/run.py": "696ba3977c405ecd496800c78afdac2ea9edda2e6c15f1aba56b9fdfc97dc225"
+    },
+    "source_digest": "9275e68981908cefbb6301dc036b2dd1b31113548877138ef93d7ab16fa7aec2",
+    "python": "3.13.5",
+    "platform": "Linux-6.8.0-1065-azure-x86_64-with-glibc2.35",
+    "numpy": "2.2.6",
+    "ortools": "9.15.6755"
+  },
+  "cases": [
+    {
+      "directory": "case_000",
+      "status": "completed",
+      "elapsed_seconds": 30.327179956948385,
+      "result_sha256": "ab5eb9e09ed3d7d6c0c7fe574b47ad2c6bbe7095982d55dc222940c88bf87664"
+    },
+    {
+      "directory": "case_001",
+      "status": "completed",
+      "elapsed_seconds": 1.2352546830661595,
+      "result_sha256": "7cf666ba71b9c4055de576725d13e118de1f5d51d23f617221a07ea974e6b30f"
+    },
+    {
+      "directory": "case_002",
+      "status": "completed",
+      "elapsed_seconds": 6.377306848065928,
+      "result_sha256": "812f744376f989e29844e605df013af5bde608b755f994a8c8de5faac68ef0f2"
+    },
+    {
+      "directory": "case_003",
+      "status": "completed",
+      "elapsed_seconds": 0.3158925601746887,
+      "result_sha256": "f91c5d07a5719f1405970d194949da889ff3d7057e942f0632cb69d491229c8c"
+    },
+    {
+      "directory": "case_004",
+      "status": "completed",
+      "elapsed_seconds": 33.830589964054525,
+      "result_sha256": "468ab89f040f1d02a1adc4d76c988a5a3f0c5f691a9dd79f46dc5be1a5d83866"
+    },
+    {
+      "directory": "case_005",
+      "status": "completed",
+      "elapsed_seconds": 1.475318469107151,
+      "result_sha256": "2698a885bc98a8ec8dba47dbd7fdf249a6fc3413894c350b463ff36fe24a0603"
+    },
+    {
+      "directory": "case_006",
+      "status": "completed",
+      "elapsed_seconds": 37.39033165294677,
+      "result_sha256": "babb36a635718b16b2c7086241c826f1a4a31adf50dbb0dbe3f2f37ba522892c"
+    },
+    {
+      "directory": "case_007",
+      "status": "completed",
+      "elapsed_seconds": 1.7974749109707773,
+      "result_sha256": "1dc632a36d5c7b336a8ab35a6893565bea8b5fd169ae0b1d50f6b19fc3f5898a"
+    },
+    {
+      "directory": "case_008",
+      "status": "completed",
+      "elapsed_seconds": 30.325959931127727,
+      "result_sha256": "0ad49b8d03ee631c1be18e4ce055dd472e8caae4670175aa0d39b75bd97ce4e6"
+    },
+    {
+      "directory": "case_009",
+      "status": "completed",
+      "elapsed_seconds": 1.1189314040821046,
+      "result_sha256": "eaa7e96b9e9495b2233889559552337453369e1aad03255d0b9406e6b717cf5c"
+    }
+  ]
+}

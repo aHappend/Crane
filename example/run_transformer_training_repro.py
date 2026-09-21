@@ -107,7 +107,7 @@ def _write_phase_html(path: Path, phase_name: str, phase: dict[str, Any], sub_ba
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Strict training reproduction for transformer (FW/BW1/BW2)")
+    parser = argparse.ArgumentParser(description="Experimental MILP training prototype (FW/BW1/BW2); see docs/REPRODUCTION.md for limits")
     parser.add_argument("--num-pes", type=int, default=2)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--verbose-progress", action="store_true")
@@ -171,7 +171,7 @@ def main() -> None:
 
     write_schedule_html(
         fw_html,
-        title="Transformer Training Reproduction - FW Overview",
+        title="Experimental Transformer Training - FW Overview",
         meta={
             "mode": "training_recompute",
             "best_sub_batch": res.best_sub_batch,

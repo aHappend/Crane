@@ -1,0 +1,9 @@
+-c constraints.txt
+# Recorded plotting environment used for the checked-in figures.
+contourpy==1.3.3
+cycler==0.12.1
+fonttools==4.65.0
+kiwisolver==1.5.1
+matplotlib==3.11.2
+pillow==12.3.0
+pyparsing==3.3.3

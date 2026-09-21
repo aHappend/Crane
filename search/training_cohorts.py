@@ -13,6 +13,12 @@ from math import floor
 from scheduler.paper_milp import _state_cost_coeffs
 
 
+class InfeasibleCohortSchedule(RuntimeError):
+    def __init__(self, message, details):
+        super().__init__(message)
+        self.details=details
+
+
 def run_training_cohorts(workload, config, retained=None):
     candidates=[]
     layers=workload.layers
@@ -66,7 +72,12 @@ def run_training_cohorts(workload, config, retained=None):
             'phases':phases,'latency':latency,'energy':energy,'edp':latency*energy,
             'peak_dram_mb':peak,'payload_mb':payload})
     if not candidates:
-        raise RuntimeError('no cohort schedule fits the activation/checkpoint DRAM budget')
+        valid=[sb for sb in config.candidate_sub_batches if sb>0 and config.batch_size % sb==0]
+        raise InfeasibleCohortSchedule('no cohort schedule fits the activation/checkpoint DRAM budget',
+            {'policy':'uniform_cohort_with_gradient_workspace',
+             'minimum_required_dram_mb':2*sample_payload*min(valid) if valid else None,
+             'available_dram_mb':config.dram_capacity,
+             'scope':'infeasible within this reference policy, not a proof for all training schedules'})
     best=min(candidates,key=lambda x:x['edp'])
     sb,k,d=best['sub_batch'],best['retained'],best['discarded']
     q=config.batch_size//sb

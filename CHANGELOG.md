@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Real-workload reproduction and recorded experiments
+
+- Export 16 compiled SET network graphs with tensor shapes, per-sample work,
+  residual edges and dynamic-weight dependencies; preserve source hashes.
+- Correct sub-batch workload scaling, complete multi-parent demand, tensor-index
+  traffic matching, DAG handling and crossing-tensor accounting.
+- Add normalized exact integer-product ScT optimization, an audited canonical
+  vertex reduction, solver time limits, status/bound/gap reports and exact
+  monotone DRAM-traffic minimization.
+- Replace the default hierarchical path with explicit parent-sub-batch macro
+  composition, tile limits, conservative memory budgets and serial alternatives.
+- Add hash-checked native SET Polar core profiles, a seeded upstream SET runner,
+  and a checked uniform-cohort training reference with explicit infeasibility.
+- Run and archive 10 inference comparisons, 9 training capacity configurations
+  and 12 native SET searches; retain the VGG regression and two policy-infeasible
+  training configurations. These are not claims of reproduced headline speedups.
+- Add one-command experiment/report tools, scientific figures and a self-contained
+  interactive demo, validated at desktop/mobile sizes in a real browser.
+- Expand independent mathematical oracles, graph/profile checks and experiment
+  integration tests. See the mathematical audit and recorded report for scope.
+
 ### Documentation and reproducibility
 
 - Identify the MICRO 2025 paper, DOI and authors; add English/Chinese READMEs,

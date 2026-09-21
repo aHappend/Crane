@@ -22,6 +22,7 @@ from example.schedule_html import write_schedule_html
 from scheduler.hardware_profile import paper_7_2_search_params, paper_7_3_search_params
 from search.nested_search import NestedSearch
 from search.scheduler_search import SearchConfig, search_schedule
+from search.training_cohorts import InfeasibleCohortSchedule
 from workloads.hierarchy import balanced_blocks
 from workloads.set_models import load_set_model
 
@@ -141,11 +142,13 @@ def main():
         case=json.loads(args.case_file.read_text())
         try:
             result=execute_case(case,args.case_dir)
+        except InfeasibleCohortSchedule as exc:
+            result={'status':'infeasible','case':case,'reason':str(exc),'capacity_analysis':exc.details}
         except Exception as exc:
             traceback.print_exc()
             result={'status':'error','case':case,'error':f'{type(exc).__name__}: {exc}'}
         write_json(args.case_dir/'result.json',result)
-        raise SystemExit(0 if result['status']=='completed' else 1)
+        raise SystemExit(0 if result['status']==case.get('expected_status','completed') else 1)
     if not args.config or not args.output_dir:
         parser.error('--config and --output-dir are required')
     config=json.loads(args.config.read_text())
@@ -175,11 +178,12 @@ def main():
         else:
             result={'status':status,'case':case};write_json(path,result)
         manifest['cases'].append({'directory':case_dir.name,'status':status,
+            'expected_status':case.get('expected_status','completed'),
             'elapsed_seconds':time.monotonic()-started,'result_sha256':hashlib.sha256(path.read_bytes()).hexdigest()})
         write_json(out/'manifest.json',manifest)
         print(f"{i+1}/{len(config['cases'])} {case['model']} {case.get('mode','nested')} B{case.get('batch')} T{case.get('tiles')}: {status}",flush=True)
     print(f'Results: {args.output_dir}')
-    if any(x['status']!='completed' for x in manifest['cases']):
+    if any(x['status']!=x['expected_status'] for x in manifest['cases']):
         raise SystemExit(1)
 
 
