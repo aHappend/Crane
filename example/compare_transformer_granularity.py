@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import csv
@@ -7,6 +7,12 @@ from datetime import datetime
 from pathlib import Path
 import sys
 from typing import Sequence
+
+_BOOTSTRAP_ROOT = Path(__file__).absolute().parents[1]
+if str(_BOOTSTRAP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BOOTSTRAP_ROOT))
+
+from project_paths import project_root_from, repo_rel
 
 ROOT = project_root_from(__file__, 1)
 if str(ROOT) not in sys.path:

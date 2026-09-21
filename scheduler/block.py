@@ -125,15 +125,15 @@ def merge_linear_blocks(
             src = blocks[grp[0]]
             new_block = Block(name=src.name, layers=list(src.layers), sub_blocks=list(src.sub_blocks))
         else:
-            merged_layers: list[Layer] = []
             merged_subs: list[Block] = []
             label_parts: list[str] = []
             for old_idx in grp:
                 src = blocks[old_idx]
-                merged_layers.extend(list(src.layers))
                 merged_subs.append(src)
                 label_parts.append(src.name)
-            new_block = Block(name="|".join(label_parts), layers=merged_layers, sub_blocks=merged_subs)
+            # Children already own their layers. Adding the same layers to the
+            # parent counts every workload twice when iter_layers() recurses.
+            new_block = Block(name="|".join(label_parts), sub_blocks=merged_subs)
 
         merged_blocks.append(new_block)
         for old_idx in grp:

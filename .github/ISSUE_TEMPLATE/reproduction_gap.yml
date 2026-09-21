@@ -1,0 +1,23 @@
+name: Paper reproduction gap
+description: Discuss a modeling difference or a missing experiment.
+title: "[Reproduction] "
+body:
+  - type: textarea
+    id: reference
+    attributes:
+      label: Paper reference
+      description: Identify the section, equation or figure and the intended behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Current implementation or evidence
+      description: Include relevant code paths, commit, configurations, units and measurements if available.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Proposed validation
+      description: Explain what evidence would establish that this gap has been addressed.

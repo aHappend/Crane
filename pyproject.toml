@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = [".venv_test", "outputs"]
+
+[tool.ruff.lint]
+# Catch runtime errors without imposing a wholesale formatting rewrite.
+select = ["E9", "F821", "F822", "F823"]

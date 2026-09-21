@@ -1,0 +1,46 @@
+cff-version: 1.2.0
+message: >-
+  Cite the Crane paper for the method. When using this independent implementation,
+  also record the repository URL, exact commit and dependency environment.
+type: software
+title: "Crane: Independent Python Reproduction"
+authors:
+  - name: aHappend
+repository-code: "https://github.com/aHappend/Crane"
+url: "https://github.com/aHappend/Crane"
+abstract: >-
+  Independent Python research implementation of the Crane scheduling workflow
+  for DNN inference and training on tiled architectures. Bundled experiments
+  use proxy workloads; paper performance results are not validated reproductions.
+keywords:
+  - inter-layer scheduling
+  - tiled architecture
+  - DNN inference
+  - training
+  - reproducibility
+  - mixed-integer programming
+preferred-citation:
+  type: conference-paper
+  title: "Crane: Inter-Layer Scheduling Framework for DNN Inference and Training Co-Support on Tiled Architecture"
+  authors:
+    - family-names: Gong
+      given-names: Yu
+    - family-names: Huang
+      given-names: Lingyi
+    - family-names: Chang
+      given-names: Haodong
+    - family-names: Liang
+      given-names: Rongjian
+    - family-names: Yang
+      given-names: Cheng
+    - family-names: Tang
+      given-names: Zhexiang
+    - family-names: Hu
+      given-names: Jiang
+    - family-names: Yuan
+      given-names: Bo
+  collection-title: Proceedings of the 58th IEEE/ACM International Symposium on Microarchitecture
+  year: 2025
+  start: 1250
+  end: 1263
+  doi: 10.1145/3725843.3756023
