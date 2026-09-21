@@ -2,9 +2,9 @@
 from typing import List, Sequence
 
 
-@dataclass
+@dataclass(eq=False)
 class Layer:
-    """Layer node in the DNN DAG."""
+    """DAG node. FLOPs and activation sizes are always per input sample."""
 
     name: str
     flops: float
@@ -13,6 +13,9 @@ class Layer:
     children: List["Layer"] = field(default_factory=list)
     op_type: str = "generic"
     map_dims: tuple[float, float, float, float] | None = None
+    input_size: float | None = None
+    weight_size: float = 0.0
+    batch_dimension: int | None = None
 
     def connect_to(self, child: "Layer") -> None:
         if child not in self.children:
@@ -20,7 +23,7 @@ class Layer:
         if self not in child.parents:
             child.parents.append(self)
 
-    def effective_map_dims(self) -> tuple[float, float, float, float]:
+    def effective_map_dims(self, sub_batch: int = 1) -> tuple[float, float, float, float]:
         """Return four non-zero mapping dims for SET-style factorization.
 
         When explicit dims are unavailable, derive a stable fallback from FLOPs
@@ -29,6 +32,8 @@ class Layer:
 
         if self.map_dims is not None:
             vals = [max(1.0, float(v)) for v in self.map_dims]
+            if self.batch_dimension is not None:
+                vals[self.batch_dimension] *= sub_batch
             return vals[0], vals[1], vals[2], vals[3]
 
         out = max(1.0, float(self.output_size))

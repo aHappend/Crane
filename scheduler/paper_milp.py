@@ -1,11 +1,14 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
+import time
 from typing import Iterable, Sequence
 
 import numpy as np
 
 from scheduler.scheduling_table import SchedulingTable, build_weighted_sct
+from scheduler.optimization import SolverReport, configure_solver, product_objective, solver_report
 
 try:
     from ortools.linear_solver import pywraplp
@@ -21,6 +24,7 @@ class ScTOptimizationResult:
     state_energy_coeff: list[float]
     objective: float
     solver_name: str
+    report: SolverReport | None = None
 
 
 def _processing_window(block_idx: int, num_blocks: int) -> range:
@@ -79,6 +83,7 @@ def _normalize_state_block_float_matrix(
     return out
 
 
+@lru_cache(maxsize=1024)
 def _factorizations4(total_tiles: int) -> list[tuple[int, int, int, int]]:
     total = max(1, int(total_tiles))
     out: list[tuple[int, int, int, int]] = []
@@ -111,6 +116,11 @@ def _best_utilization_for_tiles(
     dims: Sequence[float],
     tiles: int,
 ) -> float:
+    return _cached_utilization(tuple(float(x) for x in dims), tiles)
+
+
+@lru_cache(maxsize=65536)
+def _cached_utilization(dims: tuple[float, ...], tiles: int) -> float:
     shape = [max(1.0, float(v)) for v in dims]
     best = 1e-6
     for k1, k2, k3, k4 in _factorizations4(max(1, int(tiles))):
@@ -122,6 +132,50 @@ def _best_utilization_for_tiles(
         if util > best:
             best = util
     return max(1e-6, min(1.0, best))
+
+
+def _solve_canonical_vertices(block_flops, block_map_dims, block_unit_latency_override,
+                              block_unit_energy_override, state_block_latency_override,
+                              state_block_energy_override, total_sub_batches, dependencies,
+                              num_pes, dependency_gap, compute_power_per_tile, energy_per_op):
+    """Exact reduction for canonical inference with no extra balancing bounds.
+
+    Window completeness implies w[i+N]=w[i], sum(w[:N])=Q. Eq.5 is equivalent
+    to w[j-1]>=gap for every dependent child j. The feasible polytope is thus a
+    translated simplex. log(L*E) is concave for positive linear L/E, so a global
+    minimum exists at one of its N integral vertices. General/custom training
+    bounds continue through the full MILP. See docs/MATHEMATICAL_AUDIT.md.
+    """
+    started = time.monotonic()
+    n = len(block_flops)
+    lower = [0] * n
+    for _, child in dependencies:
+        lower[child - 1] = max(0, int(dependency_gap))
+    remaining = int(total_sub_batches) - sum(lower)
+    if remaining < 0:
+        raise RuntimeError("canonical ScT has too few sub-batches for Eq.5 dependencies")
+    lat, energy = _state_cost_coeffs(
+        block_flops, block_map_dims, block_unit_latency_override, block_unit_energy_override,
+        state_block_latency_override, state_block_energy_override, 2*n-1,
+        num_pes, compute_power_per_tile, energy_per_op,
+    )
+    best = None
+    for vertex in range(n):
+        first = lower.copy()
+        first[vertex] += remaining
+        workloads = first + first[:-1]
+        latency = sum(w*c for w,c in zip(workloads, lat))
+        ene = sum(w*c for w,c in zip(workloads, energy))
+        value = latency * ene
+        if best is None or value < best[0]:
+            best = (value, workloads)
+    objective, workloads = best
+    table = np.array([[sum(workloads[k] for k in range(j, min(i+1, n+j)))
+                       for j in range(n)] for i in range(2*n-1)], dtype=float)
+    report = SolverReport("optimal", "canonical_vertex_edp", objective, objective, 0.0,
+                          time.monotonic()-started, n, n+len(dependencies))
+    return ScTOptimizationResult(SchedulingTable(table), workloads, lat, energy,
+                                objective, "canonical-exact", report)
 
 
 def _integer_tile_allocation(
@@ -225,30 +279,6 @@ def _state_cost_coeffs(
 
     return lat, ene
 
-def _add_mccormick_product_objective(
-    solver: "pywraplp.Solver",
-    x_expr,
-    y_expr,
-    x_ub: float,
-    y_ub: float,
-):
-    x = solver.NumVar(0.0, float(max(0.0, x_ub)), "obj_x")
-    y = solver.NumVar(0.0, float(max(0.0, y_ub)), "obj_y")
-    z = solver.NumVar(0.0, solver.infinity(), "obj_xy")
-
-    solver.Add(x == x_expr)
-    solver.Add(y == y_expr)
-
-    # McCormick envelope for x,y in [0, U].
-    solver.Add(z >= x_ub * y + y_ub * x - x_ub * y_ub)
-    solver.Add(z <= x_ub * y)
-    solver.Add(z <= y_ub * x)
-    solver.Add(z >= 0.0)
-
-    solver.Minimize(z)
-    return x, y, z
-
-
 def _solve_with_ortools(
     block_flops: Sequence[float],
     block_outputs: Sequence[float],
@@ -274,6 +304,8 @@ def _solve_with_ortools(
     initial_counts_per_block: Sequence[int] | None,
     state_count_lower_bounds: Sequence[Sequence[int | None]] | None,
     state_count_upper_bounds: Sequence[Sequence[int | None]] | None,
+    solver_time_limit_s: float,
+    edp_method: str,
 ) -> ScTOptimizationResult:
     del block_outputs  # not used in ScT compute-side MILP.
 
@@ -338,10 +370,7 @@ def _solve_with_ortools(
     solver = pywraplp.Solver.CreateSolver("SCIP")
     if solver is None:
         raise RuntimeError("OR-Tools SCIP solver is not available")
-    if hasattr(solver, "SetSolverSpecificParametersAsString"):
-        solver.SetSolverSpecificParametersAsString(
-            "display/verblevel = 0\nparallel/maxnthreads = 1\nseparating/gomory/freq = -1\n"
-        )
+    configure_solver(solver, solver_time_limit_s)
 
     sct = [[solver.IntVar(0, int(max_final), f"sct_{i}_{j}") for j in range(n_blocks)] for i in range(num_states)]
     w = [solver.IntVar(0, int(max_final), f"w_{i}") for i in range(num_states)]
@@ -418,6 +447,9 @@ def _solve_with_ortools(
         if p < 0 or c < 0 or p >= n_blocks or c >= n_blocks or p == c:
             continue
 
+        if per_block_final[c] == per_block_init[c]:
+            continue  # Empty training phase has no consumer work.
+
         # OCR of Eq.5 maps to parent progress ahead of dependent child.
         child_start = c
         child_end = min(num_states - 1, n_blocks + c - 2)
@@ -447,27 +479,26 @@ def _solve_with_ortools(
     latency_expr = solver.Sum(w[i] * float(lat_coeff[i]) for i in range(num_states))
     energy_expr = solver.Sum(w[i] * float(ene_coeff[i]) for i in range(num_states))
 
+    objective_scale = 1.0
     if use_edp_objective:
-        wlat = max(1e-9, float(weight_latency))
-        wene = max(1e-9, float(weight_energy))
-        scaled_latency_expr = wlat * latency_expr
-        scaled_energy_expr = wene * energy_expr
-
-        lat_ub = float(max_final) * sum(max(0.0, c) for c in lat_coeff)
-        ene_ub = float(max_final) * sum(max(0.0, c) for c in ene_coeff)
-        _add_mccormick_product_objective(
-            solver=solver,
-            x_expr=scaled_latency_expr,
-            y_expr=scaled_energy_expr,
-            x_ub=max(1e-6, wlat * lat_ub),
-            y_ub=max(1e-6, wene * ene_ub),
+        # Exact binary expansion is available because state workloads are integers.
+        # Physical units are normalized before optimization, never clamped to 1e-6.
+        objective_scale = product_objective(
+            solver, latency_expr,
+            [(w[i], float(ene_coeff[i]), int(max_final)) for i in range(num_states)],
+            float(max_final) * sum(max(0.0, c) for c in lat_coeff),
+            method=edp_method,
         )
     else:
-        solver.Minimize(weight_latency * latency_expr + weight_energy * energy_expr)
+        objective_scale = max(1e-30, max_final * sum(
+            weight_latency * l + weight_energy * e for l, e in zip(lat_coeff, ene_coeff)))
+        solver.Minimize((weight_latency * latency_expr + weight_energy * energy_expr) / objective_scale)
 
     status = solver.Solve()
     if status not in (pywraplp.Solver.OPTIMAL, pywraplp.Solver.FEASIBLE):
         raise RuntimeError("ScT MILP failed to find feasible schedule")
+
+    report = solver_report(solver, status, f"{edp_method}_edp" if use_edp_objective else "weighted_sum", objective_scale)
 
     table = np.zeros((num_states, n_blocks), dtype=float)
     workloads: list[int] = []
@@ -481,12 +512,13 @@ def _solve_with_ortools(
     objective = float(latency * energy) if use_edp_objective else float(weight_latency * latency + weight_energy * energy)
 
     return ScTOptimizationResult(
-        sct=SchedulingTable(table=table),
+        sct=SchedulingTable(table=table, initial_counts=tuple(per_block_init)),
         state_workloads=workloads,
         state_latency_coeff=lat_coeff,
         state_energy_coeff=ene_coeff,
         objective=objective,
         solver_name="ortools-scip",
+        report=report,
     )
 
 
@@ -570,7 +602,23 @@ def optimize_sct_table(
     initial_counts_per_block: Sequence[int] | None = None,
     state_count_lower_bounds: Sequence[Sequence[int | None]] | None = None,
     state_count_upper_bounds: Sequence[Sequence[int | None]] | None = None,
+    solver_time_limit_s: float = 30.0,
+    edp_method: str = "exact",
+    canonical_fastpath: bool = False,
 ) -> ScTOptimizationResult:
+    dependencies = list(block_dependencies)
+    n = len(block_flops)
+    if (canonical_fastpath and edp_method == "exact" and use_edp_objective and n > 0
+            and num_states in (None, 2*n-1) and min_active_states <= 1
+            and min_batch_if_active <= 1 and max_batches_per_state is None
+            and final_counts_per_block is None and initial_counts_per_block is None
+            and state_count_lower_bounds is None and state_count_upper_bounds is None
+            and all(0 <= p < c < n for p,c in dependencies)):
+        return _solve_canonical_vertices(block_flops, block_map_dims, block_unit_latency_override,
+            block_unit_energy_override, state_block_latency_override, state_block_energy_override,
+            total_sub_batches, dependencies, num_pes, dependency_gap,
+            compute_power_per_tile, energy_per_op)
+    block_dependencies = dependencies
     if pywraplp is None:
         if not allow_fallback:
             raise RuntimeError("OR-Tools is unavailable and fallback is disabled")
@@ -620,6 +668,8 @@ def optimize_sct_table(
             initial_counts_per_block,
             state_count_lower_bounds,
             state_count_upper_bounds,
+            solver_time_limit_s,
+            edp_method,
         )
     except Exception:
         if not allow_fallback:
@@ -643,7 +693,6 @@ def optimize_sct_table(
             compute_power_per_tile,
             energy_per_op,
         )
-
 
 
 

@@ -43,6 +43,7 @@ def build_demo() -> tuple[list[Block], SearchConfig]:
         enable_structure_refinement=False,
         max_hierarchy_depth=1,
         allow_solver_fallback=False,
+        canonical_fastpath=False,
     )
     return [Block(layer.name, layers=[layer]) for layer in layers], config
 

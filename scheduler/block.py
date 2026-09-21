@@ -33,7 +33,7 @@ class Block:
     def layer_count(self) -> int:
         return sum(1 for _ in self.iter_layers())
 
-    def aggregate_map_dims(self) -> tuple[float, float, float, float]:
+    def aggregate_map_dims(self, sub_batch: int = 1) -> tuple[float, float, float, float]:
         layers = list(self.iter_layers())
         if not layers:
             return (1.0, 1.0, 1.0, 1.0)
@@ -42,11 +42,39 @@ class Block:
         acc = [0.0, 0.0, 0.0, 0.0]
         for layer in layers:
             weight = max(1.0, float(layer.flops)) / max(1.0, total_flops)
-            dims = layer.effective_map_dims()
+            dims = layer.effective_map_dims(sub_batch)
             for i in range(4):
                 acc[i] += weight * max(1.0, float(dims[i]))
 
         return tuple(max(1.0, v) for v in acc)
+
+    def external_input_size(self) -> float:
+        """DRAM-fed input volume per sample for source nodes in this block."""
+        return sum(ly.input_size if ly.input_size is not None else
+                   (ly.output_size if not ly.parents else 0.0) for ly in self.iter_layers())
+
+    def weight_volume(self) -> float:
+        """Static weight MB, streamed once per sub-batch in the base model."""
+        return sum(ly.weight_size for ly in self.iter_layers())
+
+    def boundary_output_size(self) -> float:
+        layers = list(self.iter_layers())
+        inside = {id(layer) for layer in layers}
+        return sum(layer.output_size for layer in layers
+                   if not layer.children or any(id(child) not in inside for child in layer.children))
+
+
+def derive_block_edge_volumes(blocks: Sequence[Block]) -> dict[tuple[int, int], float]:
+    """Count each distinct crossing tensor once per destination block."""
+    owner = {id(layer): i for i, block in enumerate(blocks) for layer in block.iter_layers()}
+    volumes: dict[tuple[int, int], float] = {}
+    for i, block in enumerate(blocks):
+        for layer in block.iter_layers():
+            destinations = {owner[id(child)] for child in layer.children
+                            if id(child) in owner and owner[id(child)] != i}
+            for j in destinations:
+                volumes[i, j] = volumes.get((i, j), 0.0) + layer.output_size
+    return volumes
 
 
 def derive_block_dependencies(blocks: Sequence[Block]) -> list[tuple[int, int]]:

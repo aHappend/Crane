@@ -6,6 +6,7 @@ import numpy as np
 @dataclass
 class SchedulingTable:
     table: np.ndarray
+    initial_counts: tuple[float, ...] | None = None
 
     @classmethod
     def zeros(cls, num_states: int, num_blocks: int) -> "SchedulingTable":
@@ -24,6 +25,14 @@ class SchedulingTable:
 
     def get(self, state: int, block: int) -> float:
         return float(self.table[state, block])
+
+    def previous(self, state: int, block: int) -> float:
+        if state > 0:
+            return self.get(state - 1, block)
+        return 0.0 if self.initial_counts is None else float(self.initial_counts[block])
+
+    def delta(self, state: int, block: int) -> float:
+        return self.get(state, block) - self.previous(state, block)
 
 
 def build_even_sct(num_states: int, block_workloads: list[float], total_sub_batches: int) -> SchedulingTable:
